@@ -6,11 +6,12 @@ import CoreGraphics
 
 /// Something the action bar does with the selected text.
 public enum TextAction: String, CaseIterable, Codable, Sendable {
-    case copy, paste, search, openLink, addToStack, uppercase, lowercase, titleCase
+    case search, cut, copy, paste, openLink, addToStack, uppercase, lowercase, titleCase
 
     /// The label on the bar's button.
     public var title: String {
         switch self {
+        case .cut: "Cut"
         case .copy: "Copy"
         case .paste: "Paste"
         case .search: "Search"
@@ -25,6 +26,7 @@ public enum TextAction: String, CaseIterable, Codable, Sendable {
     /// The menu item's title, and the button's tooltip.
     public var menuTitle: String {
         switch self {
+        case .cut: "Cut"
         case .copy: "Copy"
         case .paste: "Paste"
         case .search: "Search the Web"
@@ -40,6 +42,7 @@ public enum TextAction: String, CaseIterable, Codable, Sendable {
     /// letter per action, so the keys don't move when an action is hidden.
     public var key: Character {
         switch self {
+        case .cut: "x"
         case .copy: "c"
         case .paste: "v"
         case .search: "s"
@@ -61,14 +64,27 @@ public enum TextAction: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    /// The bar's buttons for `text`, in order. Open Link only for a web or
-    /// email address; Paste only when the clipboard has text.
-    public static func available(for text: String, canPaste: Bool) -> [TextAction] {
-        allCases.filter { action in
+    /// True for the actions that change the selected text, which only
+    /// make sense where it can be edited.
+    public var editsText: Bool {
+        switch self {
+        case .cut, .paste, .uppercase, .lowercase, .titleCase: true
+        default: false
+        }
+    }
+
+    /// The bar's actions for `text`, in order. Open Link only for a web or
+    /// email address; Paste only when the clipboard has text. Cut, Paste and
+    /// the case changes only where the text is editable; nil means unknown,
+    /// and then they're offered.
+    public static func available(for text: String, canPaste: Bool, isEditable: Bool? = nil) -> [TextAction] {
+        let editable = isEditable ?? true
+        return allCases.filter { action in
+            if action.editsText, !editable { return false }
             switch action {
-            case .openLink: LinkDetector.url(in: text) != nil
-            case .paste: canPaste
-            default: true
+            case .openLink: return LinkDetector.url(in: text) != nil
+            case .paste: return canPaste
+            default: return true
             }
         }
     }

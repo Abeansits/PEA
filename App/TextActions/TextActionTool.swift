@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import PEACore
 import SwiftUI
 
@@ -13,7 +14,13 @@ final class TextActionTool: NSObject, PEATool {
     private weak var clipboard: ClipboardAccess?
     private let reader: SelectionReader
     private let bar = ActionBarController()
+    private let watcher = SelectionWatcher()
     private var isReading = false
+    private var cancellables: Set<AnyCancellable> = []
+
+    /// A selection taller than this spans lines; the bar then goes by the
+    /// pointer instead of above the whole block.
+    private static let singleLineHeight: CGFloat = 40
 
     /// Grouped the way the menu shows them. Copy and Paste are left out: the
     /// app's own Edit menu has them.
@@ -27,6 +34,27 @@ final class TextActionTool: NSObject, PEATool {
         self.clipboard = clipboard
         self.reader = SelectionReader(clipboard: clipboard)
         super.init()
+    }
+
+    /// Called by the host after launch. Watches mouse selections while
+    /// "Show when you select text" is on.
+    func start() {
+        watcher.onSelectionGesture = { [weak self] start, end in
+            self?.handleSelectionGesture(start: start, end: end)
+        }
+        watcher.onInterruption = { [weak self] in self?.bar.close() }
+        prefs.$textActionsShowOnSelect
+            .removeDuplicates()
+            .sink { [weak self] on in
+                guard let self else { return }
+                if on {
+                    self.watcher.start()
+                } else {
+                    self.watcher.stop()
+                    self.bar.close()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     func settingsView() -> AnyView {
@@ -65,9 +93,15 @@ final class TextActionTool: NSObject, PEATool {
 
     // MARK: Bar
 
+    /// The shortcut: focuses a bar that appeared on its own, closes a
+    /// focused one, or reads the selection and opens one with focus.
     private func toggleBar() {
         if bar.isVisible {
-            bar.close()
+            if bar.hasKeyboardFocus {
+                bar.close()
+            } else {
+                bar.focus()
+            }
         } else {
             showBar()
         }
@@ -83,20 +117,47 @@ final class TextActionTool: NSObject, PEATool {
                 NSSound.beep()
                 return
             }
-            // Checks the types only: reading a Universal Clipboard item would block.
-            let canPaste = NSPasteboard.general.availableType(from: [.string]) != nil
-            bar.show(
-                TextAction.available(for: selection.text, canPaste: canPaste),
-                stats: TextStats(selection.text).summary,
-                anchor: selection.bounds
-            ) { [weak self] action in
-                self?.perform(action, on: selection.text)
-            }
+            present(selection, anchor: selection.bounds ?? Self.pointerAnchor(NSEvent.mouseLocation), focus: true)
         }
+    }
+
+    /// A drag, double-click or shift-click just ended in another app. Quiet
+    /// on purpose: most of those aren't text selections, so nothing beeps.
+    private func handleSelectionGesture(start: CGPoint, end: CGPoint) {
+        guard prefs.textActionsShowOnSelect, !bar.isVisible, !isReading,
+              let selection = reader.readMouseSelection(startingAt: start)
+        else { return }
+        let anchor: CGRect
+        if let bounds = selection.bounds, bounds.height <= Self.singleLineHeight {
+            anchor = bounds
+        } else {
+            anchor = Self.pointerAnchor(end)
+        }
+        present(selection, anchor: anchor, focus: false)
+    }
+
+    private func present(_ selection: TextSelection, anchor: CGRect, focus: Bool) {
+        // Checks the types only: reading a Universal Clipboard item would block.
+        let canPaste = NSPasteboard.general.availableType(from: [.string]) != nil
+        bar.show(
+            TextAction.available(for: selection.text, canPaste: canPaste, isEditable: selection.isEditable),
+            stats: TextStats(selection.text).summary,
+            anchor: anchor,
+            focus: focus
+        ) { [weak self] action in
+            self?.perform(action, on: selection.text)
+        }
+    }
+
+    /// The I-beam pointer reaches about 10 pt above and below its hot spot.
+    private static func pointerAnchor(_ point: CGPoint) -> CGRect {
+        CGRect(x: point.x, y: point.y - 10, width: 0, height: 20)
     }
 
     private func perform(_ action: TextAction, on text: String) {
         switch action {
+        case .cut:
+            afterFocusReturns { Paster.cut() }
         case .copy:
             // A real ⌘C keeps the app's formatting and is recorded like any copy.
             afterFocusReturns { Paster.copy() }

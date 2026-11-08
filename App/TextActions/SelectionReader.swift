@@ -22,6 +22,8 @@ struct TextSelection {
     /// Where the selection is on screen, in AppKit coordinates (y grows up
     /// from the bottom of the main screen). Nil when the app doesn't say.
     let bounds: CGRect?
+    /// Whether the text can be changed in place. Nil when unknown (read with ⌘C).
+    let isEditable: Bool?
 }
 
 /// Reads the frontmost app's selection, and pastes over it.
@@ -58,8 +60,23 @@ final class SelectionReader {
     /// Nil when nothing is selected, the selection is only whitespace, or a
     /// password manager marked it concealed.
     func read() async -> TextSelection? {
-        if let selection = readWithAccessibility() { return selection }
+        if let found = focusedSelection() { return found.selection }
         return await readWithCopy()
+    }
+
+    /// After a mouse gesture that usually selects text. Accessibility only:
+    /// a ⌘C after every drag would copy files in Finder and shapes in
+    /// drawing apps. `start` is where the gesture began, in AppKit
+    /// coordinates. It must be inside the focused text element, so dragging
+    /// a window by its title bar doesn't bring up an old selection.
+    func readMouseSelection(startingAt start: CGPoint) -> TextSelection? {
+        guard let found = focusedSelection() else { return nil }
+        if let frame = Self.frame(of: found.element),
+           let mainHeight = NSScreen.screens.first?.frame.height {
+            let point = CGPoint(x: start.x, y: mainHeight - start.y)
+            guard frame.insetBy(dx: -4, dy: -4).contains(point) else { return nil }
+        }
+        return found.selection
     }
 
     /// Pastes `text` over the selection through the clipboard, which works
@@ -83,7 +100,12 @@ final class SelectionReader {
 
     // MARK: Accessibility
 
-    private func readWithAccessibility() -> TextSelection? {
+    private struct FocusedSelection {
+        let element: AXUIElement
+        let selection: TextSelection
+    }
+
+    private func focusedSelection() -> FocusedSelection? {
         guard Self.canReadDirectly,
               let app = NSWorkspace.shared.frontmostApplication,
               // Asking our own process from the main thread would block it.
@@ -99,7 +121,31 @@ final class SelectionReader {
         guard let text = Self.copy(focused, kAXSelectedTextAttribute) as? String,
               !text.allSatisfy(\.isWhitespace)
         else { return nil }
-        return TextSelection(text: text, bounds: Self.selectionBounds(in: focused))
+        let selection = TextSelection(
+            text: text,
+            bounds: Self.selectionBounds(in: focused),
+            isEditable: Self.isSettable(focused, kAXSelectedTextAttribute) || Self.isSettable(focused, kAXValueAttribute)
+        )
+        return FocusedSelection(element: focused, selection: selection)
+    }
+
+    /// The element's frame in Accessibility coordinates (y grows down from
+    /// the top of the main screen).
+    private static func frame(of element: AXUIElement) -> CGRect? {
+        var origin = CGPoint.zero
+        var size = CGSize.zero
+        guard let position = copy(element, kAXPositionAttribute), CFGetTypeID(position) == AXValueGetTypeID(),
+              AXValueGetValue(position as! AXValue, .cgPoint, &origin),
+              let extent = copy(element, kAXSizeAttribute), CFGetTypeID(extent) == AXValueGetTypeID(),
+              AXValueGetValue(extent as! AXValue, .cgSize, &size),
+              size.width > 0, size.height > 0
+        else { return nil }
+        return CGRect(origin: origin, size: size)
+    }
+
+    private static func isSettable(_ element: AXUIElement, _ attribute: String) -> Bool {
+        var settable: DarwinBoolean = false
+        return AXUIElementIsAttributeSettable(element, attribute as CFString, &settable) == .success && settable.boolValue
     }
 
     private static func selectionBounds(in element: AXUIElement) -> CGRect? {
@@ -156,7 +202,7 @@ final class SelectionReader {
         let text = SecretDetector.shouldIgnore(pasteboardTypes: types) ? nil : pasteboard.string(forType: .string)
         saved.restore(to: pasteboard)
         guard let text, !text.allSatisfy(\.isWhitespace) else { return nil }
-        return TextSelection(text: text, bounds: nil)
+        return TextSelection(text: text, bounds: nil, isEditable: nil)
     }
 }
 

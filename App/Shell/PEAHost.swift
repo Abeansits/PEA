@@ -28,6 +28,7 @@ final class PEAHost: NSObject, NSMenuDelegate {
 
     func start() {
         clipboard.start()
+        textActions.start()
         bindHotKeys()
         observePreferences()
     }

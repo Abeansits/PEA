@@ -43,6 +43,8 @@ final class Preferences: ObservableObject {
     @Published var clipboardShortcutsEnabled: Bool { didSet { defaults.set(clipboardShortcutsEnabled, forKey: Key.clipboardShortcutsEnabled) } }
     @Published var textActionShortcutsEnabled: Bool { didSet { defaults.set(textActionShortcutsEnabled, forKey: Key.textActionShortcutsEnabled) } }
     @Published var textActionShortcut: AppShortcut { didSet { store(textActionShortcut, key: Key.textActionShortcut) } }
+    /// Show the text actions bar after a mouse selection, without the shortcut.
+    @Published var textActionsShowOnSelect: Bool { didSet { defaults.set(textActionsShowOnSelect, forKey: Key.textActionsShowOnSelect) } }
     @Published var searchEngine: SearchEngine { didSet { defaults.set(searchEngine.rawValue, forKey: Key.searchEngine) } }
     /// True while Settings is waiting for a new shortcut. Not saved.
     @Published var isCapturingShortcut = false
@@ -74,6 +76,7 @@ final class Preferences: ObservableObject {
         static let clipboardShortcutsEnabled = "clipboardShortcutsEnabled"
         static let textActionShortcutsEnabled = "textActionShortcutsEnabled"
         static let textActionShortcut = "textActionShortcut"
+        static let textActionsShowOnSelect = "textActionsShowOnSelect"
         static let searchEngine = "searchEngine"
     }
 
@@ -117,6 +120,7 @@ final class Preferences: ObservableObject {
             Key.windowShortcutsEnabled: true,
             Key.clipboardShortcutsEnabled: true,
             Key.textActionShortcutsEnabled: true,
+            Key.textActionsShowOnSelect: true,
             Key.searchEngine: SearchEngine.duckDuckGo.rawValue,
         ])
         historyLimit = defaults.integer(forKey: Key.historyLimit)
@@ -134,6 +138,7 @@ final class Preferences: ObservableObject {
         clipboardShortcutsEnabled = defaults.bool(forKey: Key.clipboardShortcutsEnabled)
         textActionShortcutsEnabled = defaults.bool(forKey: Key.textActionShortcutsEnabled)
         textActionShortcut = Self.loadShortcut(Key.textActionShortcut, from: defaults, fallback: .textActions)
+        textActionsShowOnSelect = defaults.bool(forKey: Key.textActionsShowOnSelect)
         searchEngine = SearchEngine(rawValue: defaults.string(forKey: Key.searchEngine) ?? "") ?? .duckDuckGo
     }
 }

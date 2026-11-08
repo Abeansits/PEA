@@ -17,12 +17,24 @@ final class TextActionsTests: XCTestCase {
     func testOpenLinkAndPasteShowOnlyWhenTheyCanWork() {
         XCTAssertEqual(
             TextAction.available(for: "hello world", canPaste: false),
-            [.copy, .search, .addToStack, .uppercase, .lowercase, .titleCase]
+            [.search, .cut, .copy, .addToStack, .uppercase, .lowercase, .titleCase]
         )
         XCTAssertEqual(
             TextAction.available(for: "example.com", canPaste: true),
-            [.copy, .paste, .search, .openLink, .addToStack, .uppercase, .lowercase, .titleCase]
+            [.search, .cut, .copy, .paste, .openLink, .addToStack, .uppercase, .lowercase, .titleCase]
         )
+    }
+
+    func testReadOnlyTextGetsNoEditingActions() {
+        XCTAssertEqual(
+            TextAction.available(for: "example.com", canPaste: true, isEditable: false),
+            [.search, .copy, .openLink, .addToStack]
+        )
+        XCTAssertEqual(
+            TextAction.available(for: "hello", canPaste: true, isEditable: true),
+            TextAction.available(for: "hello", canPaste: true, isEditable: nil)
+        )
+        XCTAssertEqual(TextAction.allCases.filter(\.editsText), [.cut, .paste, .uppercase, .lowercase, .titleCase])
     }
 
     // MARK: Case

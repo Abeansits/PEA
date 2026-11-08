@@ -17,11 +17,20 @@ struct TextActionSettingsView: View {
     var body: some View {
         Form {
             Section {
+                Toggle("Show when you select text", isOn: $prefs.textActionsShowOnSelect)
+                Text("Drag, double-click or shift-click to select, and the bar appears above the text. Typing, clicking elsewhere or scrolling hides it. Works in apps that share their selection through Accessibility; in others (Chrome, Electron apps) use the shortcut.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("Showing the bar")
+            }
+
+            Section {
                 Toggle("Text action shortcut", isOn: $prefs.textActionShortcutsEnabled)
                 ShortcutField(title: "Show actions for the selection", shortcut: $prefs.textActionShortcut, reserved: reserved) {
                     prefs.isCapturingShortcut = $0
                 }
-                Text("Select text in any app, then press the shortcut. Click the shortcut to type a new one. It needs ⌘, ⌥, or ⌃.")
+                Text("Opens the bar with keyboard focus, in any app. Click the shortcut to type a new one. It needs ⌘, ⌥, or ⌃.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {
@@ -41,9 +50,9 @@ struct TextActionSettingsView: View {
                 LabeledContent("Pick with the keyboard", value: "← →  ↩")
                 LabeledContent("Close", value: "esc")
             } header: {
-                Text("In the bar")
+                Text("Keys, after the shortcut")
             } footer: {
-                Text("Open Link shows up when the selection is a web or email address. Paste shows up when the clipboard has text. Case changes paste over the selection, so ⌘Z undoes them, and your clipboard is put back afterwards.")
+                Text("Aa holds the case changes and # shows the word count. Cut, Paste and the case changes appear only in text you can edit, Open only for a web or email address. Case changes paste over the selection, so ⌘Z undoes them, and your clipboard is put back afterwards.")
                     .foregroundStyle(.secondary)
             }
 

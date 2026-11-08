@@ -1,42 +1,43 @@
 # Text actions: a small PopClip
 
-Status: v1 built. Not yet tried on a real Mac.
+Status: v1.1 built: the bar shows on selection and is a compact dark strip. Not yet tried on a real Mac. (v1, shortcut only with a large bar, was tried and worked, but was too big and needed the shortcut.)
 
 ## Goal
 
-Select text in any app, press one shortcut, and get a small bar of actions next to the selection, so a new Mac doesn't need PopClip.
+Select text in any app and get a small strip of actions right above it, so a new Mac doesn't need PopClip.
 
 ## Not in v1
 
-- Showing the bar on its own after a mouse selection. v1 waits for the shortcut.
 - Extensions, custom actions, or scripts.
 - Translation, dictionary lookup, spelling, anything that needs a network service.
 - Actions on images or files.
+- A per-app list of apps where the bar shouldn't appear.
 
-## Shortcut
+## Showing the bar
 
-| Keys | Action |
-|---|---|
-| ⌃⌥A | show the bar for the current selection; press again to close it |
-
-⌃⌥A sits next to the window shortcuts on a letter they leave free. It can be changed in Settings → Text Actions, and switched off there. Settings beeps at a shortcut another PEA shortcut already holds (the clipboard ones and the ⌃⌥ letters of Windows). If one is left on the same keys anyway, Clipboard wins, then Windows, then Text Actions.
+1. **On selection** (default on). A mouse gesture that usually selects text — a drag, a double or triple click, a shift-click — shows the bar 0.12 s after the button comes up, if the app reports a selection through Accessibility. The bar doesn't take keyboard focus: typing still goes to the app. A click anywhere else, a key press, a scroll, or another app coming to the front hides it. Switch it off in Settings → Text Actions.
+2. **⌃⌥A** reads the selection in any app (with ⌘C as the fallback) and opens the bar *with* keyboard focus. Pressed while a bar is showing on its own, it gives that bar focus. Pressed again, it closes it. The shortcut can be changed or switched off; Settings beeps at keys another PEA shortcut holds. On shared keys Clipboard wins, then Windows, then Text Actions.
 
 ## The bar
 
-| Button | Key | What it does |
+A dark rounded strip, 28 pt tall, in light and dark mode alike. Segments are icons or short words, with no key hints and no counts:
+
+| Segment | What it does | Shown when |
 |---|---|---|
-| Copy | C | sends ⌘C to the app, so formatting is kept and the copy is recorded like any other |
-| Paste | V | sends ⌘V: the clipboard replaces the selection. Shown only when the clipboard has text |
-| Search | S | opens the selection in the browser with the search engine picked in Settings (DuckDuckGo by default) |
-| Open | O | opens a web or email address. Shown only when the selection is one |
-| Stack | A | pushes the selection onto the paste stack, as if it had been copied |
-| ABC / abc / Abc | U / L / T | replaces the selection with its UPPERCASE, lowercase or Title Case version |
+| 🔍 | searches the web with the engine picked in Settings (DuckDuckGo by default) | always |
+| Cut | sends ⌘X | the text is editable |
+| Copy | sends ⌘C, so formatting is kept and the copy is recorded like any other | always |
+| Paste | sends ⌘V: the clipboard replaces the selection | editable, and the clipboard has text |
+| ↗ | opens a web or email address | the selection is one |
+| Stack | pushes the selection onto the paste stack, as if it had been copied (icon) | always |
+| Aa | swaps the segments for ABC, abc, Abc: UPPERCASE, lowercase, Title Case | editable |
+| # | swaps the segments for the word and character counts (and lines, when more than one) | always |
 
-After the buttons, the bar shows the word and character counts, plus the line count when there's more than one line.
+"Editable" is what Accessibility says: the focused element's selected text or value can be set. Terminal, web pages and other read-only text get only 🔍 Copy (↗) Stack #. After ⌘C, editability is unknown and every segment is offered.
 
-- **Keys.** The letters run an action straight away. ← → (or Tab) move the highlight and ↩ or Space runs it. Esc, ⌘W, a click elsewhere, or the shortcut again closes the bar. The letters stay the same when a button is hidden.
-- **Where.** Centered above the selection, or below it when there's no room above, always inside the screen. If the app doesn't say where the selection is, the bar opens above the mouse pointer.
-- **Focus.** The bar takes keyboard focus without activating PEA, like clipboard history, so the app with the selection stays frontmost and gets the keystrokes afterwards.
+- **Mouse.** The segment under the pointer is highlighted in the accent color. A click runs it, and the first click counts even though PEA isn't the active app. Clicking the counts closes the bar.
+- **Keys** (after ⌃⌥A only, when the bar has focus). ← → or Tab move the highlight; ↩ or Space runs it. Letters run actions straight away: S search, X cut, C copy, V paste, O open, A stack, U / L / T case. Esc or ⌘W closes.
+- **Where.** Centered 6 pt above a single-line selection, or above the pointer when the selection spans lines (or the app doesn't say where it is). Below when there's no room above; always inside the screen. Swapping segments keeps the bar centered where it was.
 
 ### Details
 
@@ -48,9 +49,14 @@ After the buttons, the bar shows the word and character counts, plus the line co
 
 ## Reading the selection
 
-1. **Accessibility first.** PEA asks the frontmost app's focused element for `AXSelectedText`, and for `AXBoundsForRange` of the selected range to place the bar. This leaves the clipboard alone. It should work in native apps such as TextEdit, Notes, Mail and Xcode; which others answer is part of the test plan.
-2. **⌘C otherwise.** Many browsers and Electron apps (Chrome, VS Code, Slack) don't answer, or answer with an empty string. Then PEA saves the clipboard, sends ⌘C, waits up to 0.4 s for the pasteboard to change, reads the text, and puts the saved clipboard back, every item and type. Clipboard history stops recording for that time, so neither change is recorded.
-3. **Nothing selected** (no answer and no pasteboard change): PEA beeps.
+**After a mouse gesture: Accessibility only.** PEA asks the frontmost app's focused element for `AXSelectedText`. Two guards keep the bar from appearing when nothing was selected:
+
+- The gesture must start inside the focused element's frame (`AXPosition` + `AXSize`, with 4 pt of slack), so dragging a window by its title bar doesn't bring up an older selection in it. If the app doesn't report a frame, the check is skipped.
+- Empty or whitespace-only selections don't count.
+
+No ⌘C here: one after every drag would copy files in Finder and shapes in drawing apps. So the bar appears on its own only in apps that answer: native apps such as TextEdit, Notes, Mail and Xcode; which others do is part of the test plan. Chrome and Electron apps (VS Code, Slack) don't answer by default, so use ⌃⌥A there.
+
+**After ⌃⌥A: Accessibility, then ⌘C.** If the app doesn't answer, or answers with an empty string, PEA saves the clipboard, sends ⌘C, waits up to 0.4 s for the pasteboard to change, reads the text, and puts the saved clipboard back, every item and type. Clipboard history stops recording for that time, so neither change is recorded. No pasteboard change means nothing was selected: a beep.
 
 Edge cases that follow from ⌘C:
 
@@ -58,18 +64,21 @@ Edge cases that follow from ⌘C:
 - A selection a password manager marks as concealed is treated as no selection.
 - If the clipboard holds a Universal Clipboard item from another device, PEA can't save it (reading it blocks while it downloads), so after a ⌘C read the clipboard holds the selection instead.
 
+`AXSelectedTextRange` and `AXBoundsForRange` place the bar; `AXSelectedText` and `AXValue` being settable mark the text as editable.
+
 ### Replacing the selection
 
 Case changes paste over the selection: PEA saves the clipboard, writes the new text (marked `org.nspasteboard.TransientType` so other clipboard tools skip it), sends ⌘V, waits 0.5 s, and puts the saved clipboard back unless something else changed it meanwhile. History doesn't record any of it. Pasting rather than setting `AXSelectedText` works in every app and leaves one ⌘Z step in the app's own undo.
 
 ## Menu
 
-The menu bar menu has a **Text Actions** submenu: Show Actions for Selection, then Search the Web, Open Link, Add to Paste Stack, Make UPPERCASE, Make lowercase, Make Title Case. Each reads the selection when chosen. They work with the shortcut off. Copy and Paste are left out: the app's Edit menu has them.
+The menu bar menu has a **Text Actions** submenu: Show Actions for Selection, then Search the Web, Open Link, Add to Paste Stack, Make UPPERCASE, Make lowercase, Make Title Case. Each reads the selection when chosen. They work with the shortcut off. Cut, Copy and Paste are left out: the app's Edit menu has them.
 
 ## Permissions
 
-- **Accessibility** (`AXIsProcessTrusted`, the one Windows uses) for reading the selection directly. Without it every read goes through ⌘C, and the bar opens at the pointer.
-- **Posting keystrokes** (`CGPreflightPostEventAccess`, the one pasting uses) for ⌘C and ⌘V.
+- **Accessibility** (`AXIsProcessTrusted`, the one Windows uses) for reading the selection directly, and for the key presses that hide a bar. Without it the bar never appears on its own, and ⌃⌥A goes through ⌘C with the bar at the pointer.
+- **Posting keystrokes** (`CGPreflightPostEventAccess`, the one pasting uses) for ⌘X, ⌘C and ⌘V.
+- Watching mouse clicks in other apps (`NSEvent.addGlobalMonitorForEvents`) needs no permission.
 
 PEA doesn't prompt for either at launch. Settings → Text Actions shows both with an Allow… button. The keystroke prompt appears once per launch the first time one is needed, as it does for pasting.
 
@@ -77,34 +86,41 @@ PEA doesn't prompt for either at launch. Settings → Text Actions shows both wi
 
 | File | Job |
 |---|---|
-| `Core/Sources/PEACore/TextActions.swift` | Pure logic: `TextAction`, `TextCase`, `TextStats`, `LinkDetector`, `SearchEngine`, `BarPlacement`. Tested in `TextActionsTests.swift`. |
-| `App/TextActions/SelectionReader.swift` | Accessibility read, the ⌘C fallback, pasting over the selection, saving and restoring the clipboard. Declares `ClipboardAccess`. |
-| `App/TextActions/ActionBar.swift` | The bar: a `FloatingPanel` with a SwiftUI row of buttons, and its keys. |
-| `App/TextActions/TextActionTool.swift` | The `PEATool`: hot key, menu, running the actions. |
+| `Core/Sources/PEACore/TextActions.swift` | Pure logic: `TextAction` (with `editsText` and `available(for:canPaste:isEditable:)`), `TextCase`, `TextStats`, `LinkDetector`, `SearchEngine`, `BarPlacement`. Tested in `TextActionsTests.swift`. |
+| `App/TextActions/SelectionWatcher.swift` | A global mouse/key/scroll monitor: reports selection gestures and what interrupts them. |
+| `App/TextActions/SelectionReader.swift` | Accessibility reads (with the frame check for mouse gestures), the ⌘C fallback, pasting over the selection, saving and restoring the clipboard. Declares `ClipboardAccess`. |
+| `App/TextActions/ActionBar.swift` | `ActionBarController` (the panel, focus modes, segment swaps, keys) and `ActionBarView`, a plain `NSView` that draws the strip and tracks the mouse. |
+| `App/TextActions/TextActionTool.swift` | The `PEATool`: hot key, menu, `start()` for the watcher, running the actions. |
 | `App/TextActions/TextActionSettingsView.swift` | The Text Actions tab in Settings. |
 
-`ClipboardTool` implements `ClipboardAccess` (`suspendRecording`, `resumeRecording`, `addToStack`). `PEAHost` hands it to `TextActionTool`. `PasteboardMonitor.suspend()` makes `poll()` a no-op until `resume()`, which also marks the current pasteboard as seen.
+Details that matter:
+
+- **Not stealing focus.** The bar is a `FloatingPanel` (non-activating) with `becomesKeyOnlyIfNeeded`, so clicks on it don't make it key; `ActionBarView.acceptsFirstMouse` is true so the first click runs the segment. Only ⌃⌥A calls `makeKeyAndOrderFront`.
+- **Hover while inactive.** The tracking area uses `.activeAlways`, and the panel accepts mouse-moved events, because PEA is never the active app while the bar is up.
+- **Why AppKit, not SwiftUI.** Exact size for the panel, reliable hover and first click in a non-key panel of an inactive app.
+- `ClipboardTool` implements `ClipboardAccess`. `PEAHost.start()` calls `textActions.start()` after `clipboard.start()`.
 
 ## Test plan (on a Mac)
 
-1. TextEdit: select a word, ⌃⌥A. The bar appears right above it with Copy, Search, Stack, ABC, abc, Abc and the counts. Press U: the word turns upper case, ⌘Z undoes it, and ⇧⌘C shows no new history entry.
-2. Copy something, then select other text and press ⌃⌥A, V: the selection is replaced by the clipboard.
-3. Chrome or Slack: select text, ⌃⌥A. The bar appears at the pointer. Afterwards ⌘V still pastes what was on the clipboard before, and history has no new entry.
-4. Select `example.com` and press O: the browser opens https://example.com. Select `README.md`: no Open button.
-5. Press S on `c++ templates`: the search shows `c++ templates`, not `c templates`.
-6. Press A on a selection, then ⇧⌘V somewhere else: it pastes.
-7. Nothing selected, ⌃⌥A: a beep, and the clipboard is unchanged.
-8. Turn Accessibility off for PEA: step 1 still works, with the bar at the pointer.
-9. Switch the shortcut off: ⌃⌥A reaches the frontmost app again, and the menu's Text Actions items still work.
-10. Change the shortcut in Settings to ⌃⌥C: it beeps, because Windows' Center holds it.
+1. TextEdit: drag across a word. A small dark strip appears just above it: 🔍 Cut Copy Paste Stack Aa #. Typing replaces the word as usual and the strip disappears.
+2. Double-click a word, click Aa, then ABC: the word turns upper case, ⌘Z undoes it, and ⇧⌘C shows no new history entry.
+3. Select a sentence on a web page in Safari. If the strip appears, it has only 🔍 Copy Stack # (no Cut, Paste or Aa). Click #: the counts replace the segments.
+4. Drag a TextEdit window by its title bar while text in it is selected: no strip.
+5. Drag files in Finder, draw in Preview's markup, drag a slider: no strip, and the clipboard is unchanged.
+6. Chrome or Slack: dragging shows nothing. ⌃⌥A shows the bar at the pointer, with keyboard focus; ⌘V afterwards still pastes what was on the clipboard before.
+7. With a strip showing on its own, press ⌃⌥A: it takes focus and ← → move the highlight. Press ⌃⌥A again: it closes.
+8. Select `example.com`: ↗ appears and opens https://example.com. `README.md`: no ↗.
+9. Switch "Show when you select text" off: dragging shows nothing; ⌃⌥A still works.
+10. Turn Accessibility off for PEA: nothing appears on selection; ⌃⌥A still works through ⌘C.
 
 ## Open questions
 
-1. Is 0.5 s long enough before the clipboard comes back after a case change, in slow apps?
-2. Should Title Case leave small words (a, of, the) and words that are already all caps (NASA) alone?
+1. Is 0.12 s after the mouse comes up enough for every app to have updated its selection? Is 0.5 s long enough before the clipboard comes back after a case change?
+2. Should the strip skip some apps by default (code editors, Terminal), or wait for a per-app list?
+3. Should Title Case leave small words (a, of, the) and all-caps words (NASA) alone?
 
-## v2
+## Later
 
-- Show the bar after a mouse selection, PopClip-style, with a per-app off switch.
-- Turn on `AXManualAccessibility` for Electron apps so they answer directly instead of through ⌘C.
+- Show on selection in Chrome and Electron apps: turn on `AXManualAccessibility` for Electron apps, and consider a ⌘C read after drags in known browsers.
+- A per-app off switch.
 - More actions: sentence case, trim whitespace, wrap in quotes, a calculator for selected math, dictionary lookup.

@@ -1,7 +1,7 @@
 import AppKit
 import CoreGraphics
 
-/// Sends ⌘V (and ⌘C, for text actions) to the frontmost app.
+/// Sends ⌘V (and ⌘C and ⌘X, for text actions) to the frontmost app.
 ///
 /// Those keystrokes need the PostEvent privilege (`CGPreflightPostEventAccess`).
 /// It appears in the same Settings list as Accessibility, called Device
@@ -38,6 +38,12 @@ enum Paster {
     @discardableResult
     static func copy() -> Bool {
         postCommandKey("c")
+    }
+
+    /// Sends ⌘X, for the text actions bar's Cut.
+    @discardableResult
+    static func cut() -> Bool {
+        postCommandKey("x")
     }
 
     private static func postCommandKey(_ character: Character) -> Bool {
