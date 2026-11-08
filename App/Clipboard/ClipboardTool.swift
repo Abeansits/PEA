@@ -143,7 +143,11 @@ final class ClipboardTool: NSObject, PEATool {
     private func handleCopy(_ capture: ClipboardCapture, from sourceApp: String?) {
         guard !prefs.recordingPaused else { return }
         if let sourceApp, prefs.ignoredApps.contains(sourceApp) { return }
+        record(capture)
+    }
 
+    /// Adds to history and the stack, with the secret rules applied.
+    private func record(_ capture: ClipboardCapture) {
         let isSecret = prefs.secretHandling != .off && SecretDetector.looksLikeSecret(capture.text)
         if isSecret && prefs.secretHandling == .neverStore { return }
         model.record(
@@ -235,5 +239,26 @@ final class ClipboardTool: NSObject, PEATool {
         prefs.$recordingPaused
             .sink { [weak self] _ in self?.onStatusChange?() }
             .store(in: &cancellables)
+    }
+}
+
+/// What text actions need from the clipboard.
+extension ClipboardTool: ClipboardAccess {
+    func suspendRecording() {
+        monitor.poll() // a real copy from the last half second still counts
+        monitor.suspend()
+    }
+
+    func resumeRecording() {
+        monitor.resume()
+    }
+
+    /// An explicit request, so Pause Recording and the ignore list (both
+    /// about copies made in the background) don't apply. The secret rules do.
+    @discardableResult
+    func addToStack(_ text: String) -> Bool {
+        guard text.utf8.count <= PasteboardMonitor.maxBytes, !text.allSatisfy(\.isWhitespace) else { return false }
+        record(ClipboardCapture(text: text, html: nil, rtf: nil))
+        return true
     }
 }

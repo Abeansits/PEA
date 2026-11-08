@@ -21,6 +21,7 @@ final class PasteboardMonitor {
     private let pasteboard = NSPasteboard.general
     private var lastChangeCount: Int
     private var timer: Timer?
+    private var suspensions = 0
 
     private static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
     private static let remoteClipboardType = "com.apple.is-remote-clipboard"
@@ -60,9 +61,22 @@ final class PasteboardMonitor {
         lastChangeCount = pasteboard.changeCount
     }
 
+    /// Stops recording until `resume()`, while PEA uses the pasteboard
+    /// itself (text actions read a selection with ⌘C and paste over it).
+    func suspend() {
+        suspensions += 1
+    }
+
+    /// Counts whatever is on the pasteboard now as seen, then records again.
+    func resume() {
+        suspensions = max(0, suspensions - 1)
+        lastChangeCount = pasteboard.changeCount
+    }
+
     /// Checks for a new copy right now. Also called before ⇧⌘V so a copy made
     /// a split second earlier is never missed.
     func poll() {
+        guard suspensions == 0 else { return }
         let count = pasteboard.changeCount
         guard count != lastChangeCount else { return }
         lastChangeCount = count

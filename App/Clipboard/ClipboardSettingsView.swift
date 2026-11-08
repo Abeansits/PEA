@@ -14,10 +14,10 @@ struct ClipboardSettingsView: View {
         Form {
             Section {
                 Toggle("Clipboard shortcuts", isOn: $prefs.clipboardShortcutsEnabled)
-                ShortcutField(title: "Show history & search", shortcut: $prefs.historyShortcut, reserved: prefs.pasteShortcut) {
+                ShortcutField(title: "Show history & search", shortcut: $prefs.historyShortcut, reserved: [prefs.pasteShortcut, prefs.pasteShortcut.addingOption(), prefs.textActionShortcut]) {
                     prefs.isCapturingShortcut = $0
                 }
-                ShortcutField(title: "Paste & pop from stack", shortcut: $prefs.pasteShortcut, reserved: prefs.historyShortcut) {
+                ShortcutField(title: "Paste & pop from stack", shortcut: $prefs.pasteShortcut, reserved: [prefs.historyShortcut, prefs.textActionShortcut]) {
                     prefs.isCapturingShortcut = $0
                 }
                 LabeledContent("Paste with style") {
