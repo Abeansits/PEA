@@ -21,14 +21,18 @@ struct Caret {
     /// The text element, compared with `CFEqual` to tell a second click on
     /// the same spot from a click somewhere else.
     let element: AXUIElement
-    /// Character offset of the insertion point.
-    let location: Int
+    /// Character offset of the insertion point. Nil when the app only
+    /// reports text markers without an index; then `bounds` decides.
+    let location: Int?
     /// The insertion point on screen, in AppKit coordinates. Often a
     /// zero-width rectangle as tall as the line. Nil when the app doesn't say.
     let bounds: CGRect?
 
     func isSamePlace(as other: Caret) -> Bool {
-        location == other.location && CFEqual(element, other.element)
+        guard CFEqual(element, other.element) else { return false }
+        if let location, let otherLocation = other.location { return location == otherLocation }
+        guard let bounds, let otherBounds = other.bounds else { return false }
+        return abs(bounds.minX - otherBounds.minX) < 1 && abs(bounds.minY - otherBounds.minY) < 1
     }
 }
 
@@ -98,15 +102,38 @@ final class SelectionReader {
     func readCaret(clickedAt point: CGPoint) -> Caret? {
         guard let element = focusedElement(timeout: Self.mouseTimeout),
               Self.isEditable(element),
-              let rangeValue = Self.copy(element, kAXSelectedTextRangeAttribute),
-              CFGetTypeID(rangeValue) == AXValueGetTypeID()
-        else { return nil }
-        var range = CFRange()
-        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range),
-              range.length == 0,
               Self.contains(element, point)
         else { return nil }
-        return Caret(element: element, location: range.location, bounds: Self.selectionBounds(in: element))
+        // Native text views: a character range.
+        if let rangeValue = Self.copy(element, kAXSelectedTextRangeAttribute),
+           CFGetTypeID(rangeValue) == AXValueGetTypeID() {
+            var range = CFRange()
+            guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range), range.length == 0 else { return nil }
+            return Caret(element: element, location: range.location, bounds: Self.selectionBounds(in: element))
+        }
+        // WebKit and Chromium: a collapsed text marker range.
+        guard let marked = Self.markedSelection(from: element), marked.text.isEmpty else { return nil }
+        return Caret(element: element, location: marked.index, bounds: marked.bounds)
+    }
+
+    /// One line for the log: what the frontmost app reported, so a strip
+    /// that didn't appear can be explained. Roles, lengths and yes/no only.
+    func diagnose(at point: CGPoint) -> String {
+        let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?"
+        guard Self.canReadDirectly else { return "\(app): Accessibility not allowed" }
+        guard let element = focusedElement(timeout: Self.mouseTimeout) else { return "\(app): no focused element" }
+        let role = Self.copy(element, kAXRoleAttribute) as? String ?? "?"
+        let subrole = Self.copy(element, kAXSubroleAttribute) as? String ?? "-"
+        let selected = Self.copy(element, kAXSelectedTextAttribute).map { value in
+            (value as? String).map { "\($0.count) chars" } ?? "not text"
+        } ?? "unsupported"
+        let hasRange = Self.copy(element, kAXSelectedTextRangeAttribute) != nil
+        let marked = Self.markedSelection(from: element)
+        let markers = marked.map { found in
+            "\(found.text.count) chars, index " + (found.index.map { String($0) } ?? "-")
+        } ?? "none"
+        return "\(app): role \(role)/\(subrole), AXSelectedText \(selected), range \(hasRange ? "yes" : "no"), "
+            + "markers \(markers), editable \(Self.isEditable(element)), inside \(Self.contains(element, point))"
     }
 
     /// Pastes `text` over the selection through the clipboard, which works
@@ -149,16 +176,74 @@ final class SelectionReader {
     }
 
     private static func selection(in element: AXUIElement) -> TextSelection? {
-        // An empty answer isn't trusted: browsers often report "" for a
-        // selection in a web page. The ⌘C fallback settles it.
-        guard let text = copy(element, kAXSelectedTextAttribute) as? String,
-              !text.allSatisfy(\.isWhitespace)
-        else { return nil }
-        return TextSelection(text: text, bounds: selectionBounds(in: element), isEditable: isEditable(element))
+        if let text = copy(element, kAXSelectedTextAttribute) as? String, !text.allSatisfy(\.isWhitespace) {
+            return TextSelection(text: text, bounds: selectionBounds(in: element), isEditable: isEditable(element))
+        }
+        // WebKit (Safari, Mail) and Chromium report a selection in a page
+        // through text markers, and often "" for AXSelectedText.
+        if let marked = markedSelection(from: element), !marked.text.allSatisfy(\.isWhitespace) {
+            return TextSelection(text: marked.text, bounds: marked.bounds, isEditable: isEditable(element))
+        }
+        // Still nothing: after the shortcut, the ⌘C fallback settles it.
+        return nil
     }
 
     private static func isEditable(_ element: AXUIElement) -> Bool {
-        isSettable(element, kAXSelectedTextAttribute) || isSettable(element, kAXValueAttribute)
+        isSettable(element, kAXSelectedTextAttribute)
+            || isSettable(element, kAXValueAttribute)
+            // WebKit and Chromium: inside a contenteditable (Mail's compose window).
+            || copy(element, "AXEditableAncestor") != nil
+    }
+
+    // MARK: Text markers (WebKit, Chromium)
+
+    /// These attributes aren't in the public headers, but WebKit and
+    /// Chromium have answered them for years; screen readers depend on them.
+    private enum Marker {
+        static let selectedRange = "AXSelectedTextMarkerRange"
+        static let string = "AXStringForTextMarkerRange"
+        static let bounds = "AXBoundsForTextMarkerRange"
+        static let start = "AXStartTextMarkerForTextMarkerRange"
+        static let index = "AXIndexForTextMarker"
+    }
+
+    private struct MarkedSelection {
+        let text: String
+        let bounds: CGRect?
+        /// Character index of the selection's start, when the app reports one.
+        let index: Int?
+    }
+
+    /// The selection as text markers, asked of the element and then its
+    /// ancestors (the web area usually answers for the page).
+    private static func markedSelection(from element: AXUIElement) -> MarkedSelection? {
+        var current: AXUIElement? = element
+        for _ in 0..<8 {
+            guard let candidate = current else { return nil }
+            if let range = copy(candidate, Marker.selectedRange), CFGetTypeID(range) != AXUIElementGetTypeID(),
+               let text = parameterized(candidate, Marker.string, range) as? String {
+                let index = parameterized(candidate, Marker.start, range)
+                    .flatMap { parameterized(candidate, Marker.index, $0) as? Int }
+                return MarkedSelection(text: text, bounds: markerBounds(candidate, range), index: index)
+            }
+            current = copyElement(candidate, kAXParentAttribute)
+        }
+        return nil
+    }
+
+    private static func markerBounds(_ element: AXUIElement, _ range: CFTypeRef) -> CGRect? {
+        guard let value = parameterized(element, Marker.bounds, range), CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var rect = CGRect.zero
+        guard AXValueGetValue(value as! AXValue, .cgRect, &rect) else { return nil }
+        return onScreen(rect)
+    }
+
+    private static func parameterized(_ element: AXUIElement, _ attribute: String, _ parameter: CFTypeRef) -> CFTypeRef? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(element, attribute as CFString, parameter, &value) == .success else {
+            return nil
+        }
+        return value
     }
 
     /// Whether `point` (AppKit coordinates) is inside the element, with 4 pt
@@ -199,13 +284,19 @@ final class SelectionReader {
         )
         guard status == .success, let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
         var rect = CGRect.zero
-        guard AXValueGetValue(value as! AXValue, .cgRect, &rect),
-              rect.width > 0 || rect.height > 0,
+        guard AXValueGetValue(value as! AXValue, .cgRect, &rect) else { return nil }
+        return onScreen(rect)
+    }
+
+    /// An Accessibility rectangle (y grows down from the top of the main
+    /// screen) in AppKit coordinates. Nil for an empty rectangle or one on
+    /// no screen, which some apps answer with.
+    private static func onScreen(_ rect: CGRect) -> CGRect? {
+        guard rect.width > 0 || rect.height > 0,
               // screens[0] holds the menu bar; both coordinate systems start there.
               let mainHeight = NSScreen.screens.first?.frame.height
         else { return nil }
         let bounds = WindowLayout.flipped(rect, mainScreenHeight: mainHeight)
-        // Some apps answer with a rectangle that's on no screen.
         guard NSScreen.screens.contains(where: { $0.frame.intersects(bounds) }) else { return nil }
         return bounds
     }

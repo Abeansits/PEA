@@ -68,7 +68,7 @@ Select text with the mouse (drag, double-click or shift-click) and a small dark 
 
 With nothing selected, click where the cursor already is (like tapping it on iOS): a strip with **Paste** and **Select All** appears, handy for pasting on a new line. Cut, Paste and Aa only show up in text you can edit. The strip doesn't take keyboard focus, so you can keep typing; typing, clicking elsewhere or scrolling hides it.
 
-It appears on its own in apps that share their selection through **Accessibility** (native Mac apps). In Chrome and Electron apps (VS Code, Slack), press **⌃⌥A** instead: PEA does a quick ⌘C, puts your clipboard back right after, and that copy never shows up in history. ⌃⌥A also gives the strip keyboard focus: letters run actions (S, X, C, V, O, A, U, L, T), ← → and ↩ pick one, Esc closes it. The same actions are in the menu bar under **Text Actions**. Settings → Text Actions switches showing on selection and the shortcut on or off, changes the shortcut, and picks the search engine. The full behavior is in the [spec](docs/specs/text-actions.md).
+It appears on its own in apps that share their text through **Accessibility**: native Mac apps, and Safari and Mail through WebKit's text markers. Chrome-based browsers and Electron apps (VS Code, Slack) only share it when asked, so PEA asks the way screen readers do (a setting, on by default; it costs those apps a little CPU). Where it still doesn't appear, press **⌃⌥A**: PEA does a quick ⌘C, puts your clipboard back right after, and that copy never shows up in history. ⌃⌥A also gives the strip keyboard focus: letters run actions (S, X, C, V, O, A, U, L, T), ← → and ↩ pick one, Esc closes it. The same actions are in the menu bar under **Text Actions**. Settings → Text Actions switches showing on selection and the shortcut on or off, changes the shortcut, and picks the search engine. The full behavior is in the [spec](docs/specs/text-actions.md).
 
 ## Coming from PCP
 
@@ -178,7 +178,7 @@ Windows:
 
 Text Actions:
 
-- The strip appears on its own only in apps that answer Accessibility. Chrome and Electron apps need ⌃⌥A.
+- The strip appears on its own only in apps that answer Accessibility. If one doesn't, `log stream --predicate 'subsystem == "PEA" AND category == "textActions"' --level debug` shows what it reported; ⌃⌥A works there anyway.
 - With ⌃⌥A in those apps, the strip opens at the pointer rather than at the selection, and an app that copies the whole line when nothing is selected (VS Code) hands over that line.
 - There's no per-app off switch yet; showing on selection is on or off everywhere.
 - If the clipboard holds a Universal Clipboard item from another device, reading a selection through ⌘C replaces it.

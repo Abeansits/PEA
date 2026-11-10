@@ -56,7 +56,19 @@ A dark rounded strip, 28 pt tall, in light and dark mode alike. Segments are ico
 - The gesture must start inside the focused element's frame (`AXPosition` + `AXSize`, with 4 pt of slack), so dragging a window by its title bar doesn't bring up an older selection in it. If the app doesn't report a frame, the check is skipped.
 - Empty or whitespace-only selections don't count.
 
-No ⌘C here: one after every drag would copy files in Finder and shapes in drawing apps. So the bar appears on its own only in apps that answer: native apps such as TextEdit, Notes, Mail and Xcode; which others do is part of the test plan. Chrome and Electron apps (VS Code, Slack) don't answer by default, so use ⌃⌥A there.
+No ⌘C here: one after every drag would copy files in Finder and shapes in drawing apps. So the bar appears on its own only in apps that answer:
+
+- **Native text views** (TextEdit, Messages) answer `AXSelectedText` and `AXSelectedTextRange`.
+- **WebKit** (Safari, Mail) and **Chromium** answer for a page through *text markers* instead, and often report `""` for `AXSelectedText`. PEA then asks the focused element, and up to 8 of its ancestors, for `AXSelectedTextMarkerRange`, and reads it with `AXStringForTextMarkerRange`, `AXBoundsForTextMarkerRange`, `AXStartTextMarkerForTextMarkerRange` and `AXIndexForTextMarker`. These aren't in the public headers, but screen readers depend on them. An element inside a contenteditable (`AXEditableAncestor`) counts as editable.
+- **Chromium browsers and Electron apps** keep Accessibility off until asked. With "Turn on Accessibility in Chrome and Electron apps" on (the default, while showing on selection is on), PEA asks when such an app comes to the front: `AXManualAccessibility` for Electron apps (found by `Electron Framework.framework` in the bundle), plus `AXEnhancedUserInterface` for Chromium browsers (a list of bundle ids). That costs them some CPU. Switching the setting off sets the flags back to false. This lives in `AccessibilitySwitch`.
+
+Where the bar still doesn't appear, ⌃⌥A works through ⌘C.
+
+**Why nothing appeared.** When a selection gesture shows nothing, or a second click on the same spot within 3 s finds no cursor, PEA logs one debug line saying what the app reported: role and subrole, whether `AXSelectedText`, a range and text markers answered and how many characters, whether it counts as editable, and whether the click was inside the element. Never the text. To watch it:
+
+```sh
+log stream --predicate 'subsystem == "PEA" AND category == "textActions"' --level debug
+```
 
 **After a plain click: the insertion point.** PEA reads the focused element's `AXSelectedTextRange`. It counts only when the element is editable, the range is empty, and the click was inside the element. The element (compared with `CFEqual`) and the character offset are remembered; the next plain click compares against them. Mouse reads use a 0.25 s Accessibility timeout, because every click in every app asks.
 
@@ -91,6 +103,7 @@ PEA doesn't prompt for either at launch. Settings → Text Actions shows both wi
 | File | Job |
 |---|---|
 | `Core/Sources/PEACore/TextActions.swift` | Pure logic: `TextAction` (with `editsText` and `available(for:canPaste:isEditable:)`), `TextCase`, `TextStats`, `LinkDetector`, `SearchEngine`, `BarPlacement`. Tested in `TextActionsTests.swift`. |
+| `App/TextActions/AccessibilitySwitch.swift` | Turns on Accessibility in Chromium browsers and Electron apps as they come to the front. |
 | `App/TextActions/SelectionWatcher.swift` | A global mouse/key/scroll monitor: reports selection gestures and what interrupts them. |
 | `App/TextActions/SelectionReader.swift` | Accessibility reads (with the frame check for mouse gestures), the ⌘C fallback, pasting over the selection, saving and restoring the clipboard. Declares `ClipboardAccess`. |
 | `App/TextActions/ActionBar.swift` | `ActionBarController` (the panel, focus modes, segment swaps, keys) and `ActionBarView`, a plain `NSView` that draws the strip and tracks the mouse. |

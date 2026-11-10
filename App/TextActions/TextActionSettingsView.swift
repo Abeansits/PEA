@@ -18,7 +18,9 @@ struct TextActionSettingsView: View {
         Form {
             Section {
                 Toggle("Show when you select text or click the cursor", isOn: $prefs.textActionsShowOnSelect)
-                Text("Drag, double-click or shift-click to select, and the bar appears above the text. With nothing selected, click where the cursor already is (like tapping it on iOS) for Paste and Select All. Typing, clicking elsewhere or scrolling hides it. Works in apps that share their text through Accessibility; in others (Chrome, Electron apps) use the shortcut.")
+                Toggle("Turn on Accessibility in Chrome and Electron apps", isOn: $prefs.textActionsSwitchOnApps)
+                    .disabled(!prefs.textActionsShowOnSelect)
+                Text("Drag, double-click or shift-click to select, and the bar appears above the text. With nothing selected, click where the cursor already is (like tapping it on iOS) for Paste and Select All. Typing, clicking elsewhere or scrolling hides it. Works in apps that share their text through Accessibility. Chrome-based browsers and Electron apps (Slack, VS Code) only do when asked, the way screen readers ask; that costs them a little CPU. Where it still doesn't show, use the shortcut.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } header: {

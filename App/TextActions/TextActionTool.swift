@@ -15,12 +15,16 @@ final class TextActionTool: NSObject, PEATool {
     private let reader: SelectionReader
     private let bar = ActionBarController()
     private let watcher = SelectionWatcher()
+    private let accessibilitySwitch = AccessibilitySwitch()
     private var isReading = false
     private var cancellables: Set<AnyCancellable> = []
     /// Where the last plain click left the insertion point. A second click
     /// on the same spot shows Paste and Select All, like tapping the cursor
     /// on iOS.
     private var lastCaret: Caret?
+    /// The last plain click, to tell when someone is trying the cursor
+    /// strip (a second click on the same spot) and log why it didn't show.
+    private var lastClick: (point: CGPoint, time: Date)?
 
     /// A selection taller than this spans lines; the bar then goes by the
     /// pointer instead of above the whole block.
@@ -59,6 +63,18 @@ final class TextActionTool: NSObject, PEATool {
                 } else {
                     self.watcher.stop()
                     self.bar.close()
+                }
+            }
+            .store(in: &cancellables)
+        Publishers.CombineLatest(prefs.$textActionsShowOnSelect, prefs.$textActionsSwitchOnApps)
+            .map { $0 && $1 }
+            .removeDuplicates()
+            .sink { [weak self] on in
+                guard let self else { return }
+                if on {
+                    self.accessibilitySwitch.start()
+                } else {
+                    self.accessibilitySwitch.stop()
                 }
             }
             .store(in: &cancellables)
@@ -132,9 +148,11 @@ final class TextActionTool: NSObject, PEATool {
     /// on purpose: most of those aren't text selections, so nothing beeps.
     private func handleSelectionGesture(start: CGPoint, end: CGPoint) {
         lastCaret = nil
-        guard prefs.textActionsShowOnSelect, !bar.isVisible, !isReading,
-              let selection = reader.readMouseSelection(startingAt: start)
-        else { return }
+        guard prefs.textActionsShowOnSelect, !bar.isVisible, !isReading else { return }
+        guard let selection = reader.readMouseSelection(startingAt: start) else {
+            Log.textActions.debug("No strip after a selection: \(self.reader.diagnose(at: start), privacy: .public)")
+            return
+        }
         let anchor: CGRect
         if let bounds = selection.bounds, bounds.height <= Self.singleLineHeight {
             anchor = bounds
@@ -149,13 +167,21 @@ final class TextActionTool: NSObject, PEATool {
     /// it would be a double-click) shows the strip. The click after that
     /// hides it again and starts over.
     private func handlePlainClick(at point: CGPoint) {
-        guard prefs.textActionsShowOnSelect, !bar.isVisible, !isReading,
-              let caret = reader.readCaret(clickedAt: point)
-        else {
+        guard prefs.textActionsShowOnSelect, !bar.isVisible, !isReading else { return }
+        let previous = lastClick
+        lastClick = (point, Date())
+        let isRetry = previous.map { hypot($0.point.x - point.x, $0.point.y - point.y) < 6 && -$0.time.timeIntervalSinceNow < 3 } ?? false
+        guard let caret = reader.readCaret(clickedAt: point) else {
+            if isRetry {
+                Log.textActions.debug("No cursor found on a second click: \(self.reader.diagnose(at: point), privacy: .public)")
+            }
             lastCaret = nil
             return
         }
         guard let last = lastCaret, caret.isSamePlace(as: last) else {
+            if isRetry, lastCaret != nil {
+                Log.textActions.debug("Second click didn't match the first cursor: \(self.reader.diagnose(at: point), privacy: .public)")
+            }
             lastCaret = caret
             return
         }

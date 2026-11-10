@@ -173,7 +173,7 @@ One footer sentence: the menu bar's history and paste items work with the shortc
 
 `App/Preferences.swift` stays the only `ObservableObject` and the only `UserDefaults` facade. Tools add keys there. Do not split defaults across files, and do not give a tool its own `UserDefaults` suite.
 
-Text Actions adds `textActionsShowOnSelect` (default `true`: show the bar after a mouse selection), `textActionShortcutsEnabled` (default `true`, parallel to the other two switches), `textActionShortcut` (an `AppShortcut` stored as JSON like the clipboard shortcuts, default `.textActions` = ⌃⌥A), and `searchEngine` (a `SearchEngine` raw value, default `duckDuckGo`).
+Text Actions adds `textActionsShowOnSelect` (default `true`: show the bar after a mouse selection or a second click on the cursor), `textActionsSwitchOnApps` (default `true`: turn on Accessibility in Chromium browsers and Electron apps), `textActionShortcutsEnabled` (default `true`, parallel to the other two switches), `textActionShortcut` (an `AppShortcut` stored as JSON like the clipboard shortcuts, default `.textActions` = ⌃⌥A), and `searchEngine` (a `SearchEngine` raw value, default `duckDuckGo`).
 
 Add `clipboardShortcutsEnabled`, parallel to `windowShortcutsEnabled`:
 
@@ -319,6 +319,7 @@ In `README.md`, state that Settings → Clipboard can switch the clipboard short
 - `App/TextActions/SelectionReader.swift` — also declares `ClipboardAccess`
 - `App/TextActions/ActionBar.swift` — `ActionBarController` and the AppKit `ActionBarView`
 - `App/TextActions/SelectionWatcher.swift`
+- `App/TextActions/AccessibilitySwitch.swift`
 - `App/TextActions/TextActionSettingsView.swift`
 - `scripts/check-names.sh`
 

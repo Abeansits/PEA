@@ -45,6 +45,9 @@ final class Preferences: ObservableObject {
     @Published var textActionShortcut: AppShortcut { didSet { store(textActionShortcut, key: Key.textActionShortcut) } }
     /// Show the text actions bar after a mouse selection, without the shortcut.
     @Published var textActionsShowOnSelect: Bool { didSet { defaults.set(textActionsShowOnSelect, forKey: Key.textActionsShowOnSelect) } }
+    /// Ask Chromium browsers and Electron apps to turn on Accessibility, so
+    /// the bar can show on selection there too.
+    @Published var textActionsSwitchOnApps: Bool { didSet { defaults.set(textActionsSwitchOnApps, forKey: Key.textActionsSwitchOnApps) } }
     @Published var searchEngine: SearchEngine { didSet { defaults.set(searchEngine.rawValue, forKey: Key.searchEngine) } }
     /// True while Settings is waiting for a new shortcut. Not saved.
     @Published var isCapturingShortcut = false
@@ -77,6 +80,7 @@ final class Preferences: ObservableObject {
         static let textActionShortcutsEnabled = "textActionShortcutsEnabled"
         static let textActionShortcut = "textActionShortcut"
         static let textActionsShowOnSelect = "textActionsShowOnSelect"
+        static let textActionsSwitchOnApps = "textActionsSwitchOnApps"
         static let searchEngine = "searchEngine"
     }
 
@@ -121,6 +125,7 @@ final class Preferences: ObservableObject {
             Key.clipboardShortcutsEnabled: true,
             Key.textActionShortcutsEnabled: true,
             Key.textActionsShowOnSelect: true,
+            Key.textActionsSwitchOnApps: true,
             Key.searchEngine: SearchEngine.duckDuckGo.rawValue,
         ])
         historyLimit = defaults.integer(forKey: Key.historyLimit)
@@ -139,6 +144,7 @@ final class Preferences: ObservableObject {
         textActionShortcutsEnabled = defaults.bool(forKey: Key.textActionShortcutsEnabled)
         textActionShortcut = Self.loadShortcut(Key.textActionShortcut, from: defaults, fallback: .textActions)
         textActionsShowOnSelect = defaults.bool(forKey: Key.textActionsShowOnSelect)
+        textActionsSwitchOnApps = defaults.bool(forKey: Key.textActionsSwitchOnApps)
         searchEngine = SearchEngine(rawValue: defaults.string(forKey: Key.searchEngine) ?? "") ?? .duckDuckGo
     }
 }
