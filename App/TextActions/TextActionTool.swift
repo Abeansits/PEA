@@ -17,6 +17,10 @@ final class TextActionTool: NSObject, PEATool {
     private let watcher = SelectionWatcher()
     private var isReading = false
     private var cancellables: Set<AnyCancellable> = []
+    /// Where the last plain click left the insertion point. A second click
+    /// on the same spot shows Paste and Select All, like tapping the cursor
+    /// on iOS.
+    private var lastCaret: Caret?
 
     /// A selection taller than this spans lines; the bar then goes by the
     /// pointer instead of above the whole block.
@@ -41,6 +45,9 @@ final class TextActionTool: NSObject, PEATool {
     func start() {
         watcher.onSelectionGesture = { [weak self] start, end in
             self?.handleSelectionGesture(start: start, end: end)
+        }
+        watcher.onPlainClick = { [weak self] point in
+            self?.handlePlainClick(at: point)
         }
         watcher.onInterruption = { [weak self] in self?.bar.close() }
         prefs.$textActionsShowOnSelect
@@ -124,6 +131,7 @@ final class TextActionTool: NSObject, PEATool {
     /// A drag, double-click or shift-click just ended in another app. Quiet
     /// on purpose: most of those aren't text selections, so nothing beeps.
     private func handleSelectionGesture(start: CGPoint, end: CGPoint) {
+        lastCaret = nil
         guard prefs.textActionsShowOnSelect, !bar.isVisible, !isReading,
               let selection = reader.readMouseSelection(startingAt: start)
         else { return }
@@ -134,6 +142,30 @@ final class TextActionTool: NSObject, PEATool {
             anchor = Self.pointerAnchor(end)
         }
         present(selection, anchor: anchor, focus: false)
+    }
+
+    /// A click that didn't select anything. The first one on a spot only
+    /// remembers the insertion point; a second one there (after a pause, or
+    /// it would be a double-click) shows the strip. The click after that
+    /// hides it again and starts over.
+    private func handlePlainClick(at point: CGPoint) {
+        guard prefs.textActionsShowOnSelect, !bar.isVisible, !isReading,
+              let caret = reader.readCaret(clickedAt: point)
+        else {
+            lastCaret = nil
+            return
+        }
+        guard let last = lastCaret, caret.isSamePlace(as: last) else {
+            lastCaret = caret
+            return
+        }
+        lastCaret = nil
+        let anchor = caret.bounds ?? Self.pointerAnchor(point)
+        // Checks the types only: reading a Universal Clipboard item would block.
+        let canPaste = NSPasteboard.general.availableType(from: [.string]) != nil
+        bar.show(TextAction.availableAtCaret(canPaste: canPaste), stats: nil, anchor: anchor, focus: false) { [weak self] action in
+            self?.perform(action, on: "")
+        }
     }
 
     private func present(_ selection: TextSelection, anchor: CGRect, focus: Bool) {
@@ -163,6 +195,8 @@ final class TextActionTool: NSObject, PEATool {
             afterFocusReturns { Paster.copy() }
         case .paste:
             afterFocusReturns { Paster.paste() }
+        case .selectAll:
+            afterFocusReturns { Paster.selectAll() }
         case .search:
             open(prefs.searchEngine.url(for: text))
         case .openLink:

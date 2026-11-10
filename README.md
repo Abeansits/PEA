@@ -66,7 +66,7 @@ Select text with the mouse (drag, double-click or shift-click) and a small dark 
 | Aa | UPPERCASE, lowercase or Title Case; ⌘Z undoes it |
 | # | shows the word and character counts |
 
-Cut, Paste and Aa only show up in text you can edit. The strip doesn't take keyboard focus, so you can keep typing; typing, clicking elsewhere or scrolling hides it.
+With nothing selected, click where the cursor already is (like tapping it on iOS): a strip with **Paste** and **Select All** appears, handy for pasting on a new line. Cut, Paste and Aa only show up in text you can edit. The strip doesn't take keyboard focus, so you can keep typing; typing, clicking elsewhere or scrolling hides it.
 
 It appears on its own in apps that share their selection through **Accessibility** (native Mac apps). In Chrome and Electron apps (VS Code, Slack), press **⌃⌥A** instead: PEA does a quick ⌘C, puts your clipboard back right after, and that copy never shows up in history. ⌃⌥A also gives the strip keyboard focus: letters run actions (S, X, C, V, O, A, U, L, T), ← → and ↩ pick one, Esc closes it. The same actions are in the menu bar under **Text Actions**. Settings → Text Actions switches showing on selection and the shortcut on or off, changes the shortcut, and picks the search engine. The full behavior is in the [spec](docs/specs/text-actions.md).
 

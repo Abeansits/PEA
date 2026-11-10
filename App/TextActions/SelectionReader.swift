@@ -16,6 +16,22 @@ protocol ClipboardAccess: AnyObject {
     func addToStack(_ text: String) -> Bool
 }
 
+/// An insertion point with nothing selected, in editable text.
+struct Caret {
+    /// The text element, compared with `CFEqual` to tell a second click on
+    /// the same spot from a click somewhere else.
+    let element: AXUIElement
+    /// Character offset of the insertion point.
+    let location: Int
+    /// The insertion point on screen, in AppKit coordinates. Often a
+    /// zero-width rectangle as tall as the line. Nil when the app doesn't say.
+    let bounds: CGRect?
+
+    func isSamePlace(as other: Caret) -> Bool {
+        location == other.location && CFEqual(element, other.element)
+    }
+}
+
 /// Text selected in the frontmost app.
 struct TextSelection {
     let text: String
@@ -60,7 +76,7 @@ final class SelectionReader {
     /// Nil when nothing is selected, the selection is only whitespace, or a
     /// password manager marked it concealed.
     func read() async -> TextSelection? {
-        if let found = focusedSelection() { return found.selection }
+        if let element = focusedElement(), let selection = Self.selection(in: element) { return selection }
         return await readWithCopy()
     }
 
@@ -70,13 +86,27 @@ final class SelectionReader {
     /// coordinates. It must be inside the focused text element, so dragging
     /// a window by its title bar doesn't bring up an old selection.
     func readMouseSelection(startingAt start: CGPoint) -> TextSelection? {
-        guard let found = focusedSelection() else { return nil }
-        if let frame = Self.frame(of: found.element),
-           let mainHeight = NSScreen.screens.first?.frame.height {
-            let point = CGPoint(x: start.x, y: mainHeight - start.y)
-            guard frame.insetBy(dx: -4, dy: -4).contains(point) else { return nil }
-        }
-        return found.selection
+        guard let element = focusedElement(timeout: Self.mouseTimeout),
+              let selection = Self.selection(in: element),
+              Self.contains(element, start)
+        else { return nil }
+        return selection
+    }
+
+    /// After a plain click: the insertion point, if the click landed in
+    /// editable text and left nothing selected. Accessibility only.
+    func readCaret(clickedAt point: CGPoint) -> Caret? {
+        guard let element = focusedElement(timeout: Self.mouseTimeout),
+              Self.isEditable(element),
+              let rangeValue = Self.copy(element, kAXSelectedTextRangeAttribute),
+              CFGetTypeID(rangeValue) == AXValueGetTypeID()
+        else { return nil }
+        var range = CFRange()
+        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range),
+              range.length == 0,
+              Self.contains(element, point)
+        else { return nil }
+        return Caret(element: element, location: range.location, bounds: Self.selectionBounds(in: element))
     }
 
     /// Pastes `text` over the selection through the clipboard, which works
@@ -100,12 +130,11 @@ final class SelectionReader {
 
     // MARK: Accessibility
 
-    private struct FocusedSelection {
-        let element: AXUIElement
-        let selection: TextSelection
-    }
+    /// Every click in every app asks, so a hung app gets less time than
+    /// after the shortcut.
+    private static let mouseTimeout: Float = 0.25
 
-    private func focusedSelection() -> FocusedSelection? {
+    private func focusedElement(timeout: Float = 0.5) -> AXUIElement? {
         guard Self.canReadDirectly,
               let app = NSWorkspace.shared.frontmostApplication,
               // Asking our own process from the main thread would block it.
@@ -113,20 +142,32 @@ final class SelectionReader {
         else { return nil }
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
         // A hung app shouldn't freeze PEA. The timeout is per element.
-        AXUIElementSetMessagingTimeout(appElement, 0.5)
+        AXUIElementSetMessagingTimeout(appElement, timeout)
         guard let focused = Self.copyElement(appElement, kAXFocusedUIElementAttribute) else { return nil }
-        AXUIElementSetMessagingTimeout(focused, 0.5)
+        AXUIElementSetMessagingTimeout(focused, timeout)
+        return focused
+    }
+
+    private static func selection(in element: AXUIElement) -> TextSelection? {
         // An empty answer isn't trusted: browsers often report "" for a
         // selection in a web page. The ⌘C fallback settles it.
-        guard let text = Self.copy(focused, kAXSelectedTextAttribute) as? String,
+        guard let text = copy(element, kAXSelectedTextAttribute) as? String,
               !text.allSatisfy(\.isWhitespace)
         else { return nil }
-        let selection = TextSelection(
-            text: text,
-            bounds: Self.selectionBounds(in: focused),
-            isEditable: Self.isSettable(focused, kAXSelectedTextAttribute) || Self.isSettable(focused, kAXValueAttribute)
-        )
-        return FocusedSelection(element: focused, selection: selection)
+        return TextSelection(text: text, bounds: selectionBounds(in: element), isEditable: isEditable(element))
+    }
+
+    private static func isEditable(_ element: AXUIElement) -> Bool {
+        isSettable(element, kAXSelectedTextAttribute) || isSettable(element, kAXValueAttribute)
+    }
+
+    /// Whether `point` (AppKit coordinates) is inside the element, with 4 pt
+    /// of slack. True when the app doesn't report a frame.
+    private static func contains(_ element: AXUIElement, _ point: CGPoint) -> Bool {
+        guard let frame = frame(of: element),
+              let mainHeight = NSScreen.screens.first?.frame.height
+        else { return true }
+        return frame.insetBy(dx: -4, dy: -4).contains(CGPoint(x: point.x, y: mainHeight - point.y))
     }
 
     /// The element's frame in Accessibility coordinates (y grows down from

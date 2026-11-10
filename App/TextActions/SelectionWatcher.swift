@@ -1,7 +1,8 @@
 import AppKit
 
-/// Watches the mouse in other apps for gestures that usually select text:
-/// a drag, a double or triple click, a shift-click. It also reports what
+/// Watches the mouse in other apps for gestures that usually select text
+/// (a drag, a double or triple click, a shift-click) and for plain clicks,
+/// which may place an insertion point. It also reports what
 /// should hide a bar that appeared on its own: a click, a key, a scroll,
 /// another app coming to the front.
 ///
@@ -12,6 +13,8 @@ import AppKit
 final class SelectionWatcher {
     /// Both points in AppKit screen coordinates: where the gesture began and ended.
     var onSelectionGesture: ((_ start: CGPoint, _ end: CGPoint) -> Void)?
+    /// A single click that didn't move: it may have placed an insertion point.
+    var onPlainClick: ((_ point: CGPoint) -> Void)?
     var onInterruption: (() -> Void)?
 
     private var monitor: Any?
@@ -65,12 +68,18 @@ final class SelectionWatcher {
         case .leftMouseUp:
             guard let start = downPoint else { return }
             downPoint = nil
-            guard dragged || event.clickCount >= 2 || event.modifierFlags.contains(.shift) else { return }
+            let selects = dragged || event.clickCount >= 2 || event.modifierFlags.contains(.shift)
+            let isPlainClick = !selects && event.clickCount == 1
+            guard selects || isPlainClick else { return }
             pending?.cancel()
             pending = Task { [weak self] in
                 try? await Task.sleep(for: Self.settle)
-                guard !Task.isCancelled else { return }
-                self?.onSelectionGesture?(start, location)
+                guard !Task.isCancelled, let self else { return }
+                if selects {
+                    self.onSelectionGesture?(start, location)
+                } else {
+                    self.onPlainClick?(start)
+                }
             }
         default:
             interrupt()

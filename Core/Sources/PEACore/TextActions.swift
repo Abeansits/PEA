@@ -6,7 +6,7 @@ import CoreGraphics
 
 /// Something the action bar does with the selected text.
 public enum TextAction: String, CaseIterable, Codable, Sendable {
-    case search, cut, copy, paste, openLink, addToStack, uppercase, lowercase, titleCase
+    case search, cut, copy, paste, selectAll, openLink, addToStack, uppercase, lowercase, titleCase
 
     /// The label on the bar's button.
     public var title: String {
@@ -14,6 +14,7 @@ public enum TextAction: String, CaseIterable, Codable, Sendable {
         case .cut: "Cut"
         case .copy: "Copy"
         case .paste: "Paste"
+        case .selectAll: "Select All"
         case .search: "Search"
         case .openLink: "Open"
         case .addToStack: "Stack"
@@ -29,6 +30,7 @@ public enum TextAction: String, CaseIterable, Codable, Sendable {
         case .cut: "Cut"
         case .copy: "Copy"
         case .paste: "Paste"
+        case .selectAll: "Select All"
         case .search: "Search the Web"
         case .openLink: "Open Link"
         case .addToStack: "Add to Paste Stack"
@@ -45,6 +47,7 @@ public enum TextAction: String, CaseIterable, Codable, Sendable {
         case .cut: "x"
         case .copy: "c"
         case .paste: "v"
+        case .selectAll: "e"
         case .search: "s"
         case .openLink: "o"
         case .addToStack: "a"
@@ -84,9 +87,16 @@ public enum TextAction: String, CaseIterable, Codable, Sendable {
             switch action {
             case .openLink: return LinkDetector.url(in: text) != nil
             case .paste: return canPaste
+            case .selectAll: return false
             default: return true
             }
         }
+    }
+
+    /// The bar's actions at an insertion point with nothing selected (the
+    /// cursor clicked a second time, like tapping it on iOS).
+    public static func availableAtCaret(canPaste: Bool) -> [TextAction] {
+        canPaste ? [.paste, .selectAll] : [.selectAll]
     }
 }
 

@@ -16,7 +16,8 @@ Select text in any app and get a small strip of actions right above it, so a new
 ## Showing the bar
 
 1. **On selection** (default on). A mouse gesture that usually selects text — a drag, a double or triple click, a shift-click — shows the bar 0.12 s after the button comes up, if the app reports a selection through Accessibility. The bar doesn't take keyboard focus: typing still goes to the app. A click anywhere else, a key press, a scroll, or another app coming to the front hides it. Switch it off in Settings → Text Actions.
-2. **⌃⌥A** reads the selection in any app (with ⌘C as the fallback) and opens the bar *with* keyboard focus. Pressed while a bar is showing on its own, it gives that bar focus. Pressed again, it closes it. The shortcut can be changed or switched off; Settings beeps at keys another PEA shortcut holds. On shared keys Clipboard wins, then Windows, then Text Actions.
+2. **Clicking the cursor again** (same switch). With nothing selected, click in editable text to place the insertion point, pause, then click the same spot again: a strip with **Paste** (when the clipboard has text) and **Select All** appears above the cursor, like tapping the cursor on iOS. Clicking an empty spot past the end of a line puts the cursor at the line's end, so two clicks there are enough to paste on a new line. The next click hides the strip and starts over. A click within the double-click interval is a double-click and selects a word instead. Single clicks that move the cursor somewhere new stay quiet.
+3. **⌃⌥A** reads the selection in any app (with ⌘C as the fallback) and opens the bar *with* keyboard focus. Pressed while a bar is showing on its own, it gives that bar focus. Pressed again, it closes it. The shortcut can be changed or switched off; Settings beeps at keys another PEA shortcut holds. On shared keys Clipboard wins, then Windows, then Text Actions.
 
 ## The bar
 
@@ -26,6 +27,7 @@ A dark rounded strip, 28 pt tall, in light and dark mode alike. Segments are ico
 |---|---|---|
 | 🔍 | searches the web with the engine picked in Settings (DuckDuckGo by default) | always |
 | Cut | sends ⌘X | the text is editable |
+| Select All | sends ⌘A | only on the cursor strip |
 | Copy | sends ⌘C, so formatting is kept and the copy is recorded like any other | always |
 | Paste | sends ⌘V: the clipboard replaces the selection | editable, and the clipboard has text |
 | ↗ | opens a web or email address | the selection is one |
@@ -55,6 +57,8 @@ A dark rounded strip, 28 pt tall, in light and dark mode alike. Segments are ico
 - Empty or whitespace-only selections don't count.
 
 No ⌘C here: one after every drag would copy files in Finder and shapes in drawing apps. So the bar appears on its own only in apps that answer: native apps such as TextEdit, Notes, Mail and Xcode; which others do is part of the test plan. Chrome and Electron apps (VS Code, Slack) don't answer by default, so use ⌃⌥A there.
+
+**After a plain click: the insertion point.** PEA reads the focused element's `AXSelectedTextRange`. It counts only when the element is editable, the range is empty, and the click was inside the element. The element (compared with `CFEqual`) and the character offset are remembered; the next plain click compares against them. Mouse reads use a 0.25 s Accessibility timeout, because every click in every app asks.
 
 **After ⌃⌥A: Accessibility, then ⌘C.** If the app doesn't answer, or answers with an empty string, PEA saves the clipboard, sends ⌘C, waits up to 0.4 s for the pasteboard to change, reads the text, and puts the saved clipboard back, every item and type. Clipboard history stops recording for that time, so neither change is recorded. No pasteboard change means nothing was selected: a beep.
 
@@ -106,6 +110,7 @@ Details that matter:
 2. Double-click a word, click Aa, then ABC: the word turns upper case, ⌘Z undoes it, and ⇧⌘C shows no new history entry.
 3. Select a sentence on a web page in Safari. If the strip appears, it has only 🔍 Copy Stack # (no Cut, Paste or Aa). Click #: the counts replace the segments.
 4. Drag a TextEdit window by its title bar while text in it is selected: no strip.
+4a. TextEdit: click past the end of a line, pause, click there again: Paste · Select All appear above the cursor. Paste puts the clipboard there. Click once more: the strip goes away. Click somewhere new once: nothing.
 5. Drag files in Finder, draw in Preview's markup, drag a slider: no strip, and the clipboard is unchanged.
 6. Chrome or Slack: dragging shows nothing. ⌃⌥A shows the bar at the pointer, with keyboard focus; ⌘V afterwards still pastes what was on the clipboard before.
 7. With a strip showing on its own, press ⌃⌥A: it takes focus and ← → move the highlight. Press ⌃⌥A again: it closes.

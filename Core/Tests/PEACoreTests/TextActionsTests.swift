@@ -25,6 +25,12 @@ final class TextActionsTests: XCTestCase {
         )
     }
 
+    func testCaretOffersPasteAndSelectAll() {
+        XCTAssertEqual(TextAction.availableAtCaret(canPaste: true), [.paste, .selectAll])
+        XCTAssertEqual(TextAction.availableAtCaret(canPaste: false), [.selectAll])
+        XCTAssertFalse(TextAction.available(for: "hello", canPaste: true).contains(.selectAll))
+    }
+
     func testReadOnlyTextGetsNoEditingActions() {
         XCTAssertEqual(
             TextAction.available(for: "example.com", canPaste: true, isEditable: false),

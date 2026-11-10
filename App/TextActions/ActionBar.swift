@@ -30,7 +30,7 @@ final class ActionBarController {
     private let strip = ActionBarView()
     private var keyMonitor: Any?
     private var actions: [TextAction] = []
-    private var stats = ""
+    private var stats: String?
     private var onChoose: ((TextAction) -> Void)?
 
     var isVisible: Bool { panel.isVisible }
@@ -48,15 +48,16 @@ final class ActionBarController {
     }
 
     /// `anchor` is what the bar sits above, in AppKit screen coordinates.
+    /// Nil `stats` leaves out the "#" segment (nothing selected to count).
     func show(
-        _ actions: [TextAction], stats: String, anchor: CGRect, focus: Bool,
+        _ actions: [TextAction], stats: String?, anchor: CGRect, focus: Bool,
         onChoose: @escaping (TextAction) -> Void
     ) {
         guard !actions.isEmpty else { NSSound.beep(); return }
         self.actions = actions
         self.stats = stats
         self.onChoose = onChoose
-        strip.items = Self.mainRow(for: actions)
+        strip.items = Self.mainRow(for: actions, counts: stats != nil)
         strip.highlighted = focus ? 0 : nil
         let size = strip.intrinsicContentSize
         panel.setContentSize(size)
@@ -87,7 +88,7 @@ final class ActionBarController {
     }
 
     /// Case changes fold into one "Aa" segment; "#" goes last.
-    private static func mainRow(for actions: [TextAction]) -> [BarItem] {
+    private static func mainRow(for actions: [TextAction], counts: Bool) -> [BarItem] {
         var items: [BarItem] = []
         for action in actions {
             if action.textCase != nil {
@@ -96,7 +97,7 @@ final class ActionBarController {
                 items.append(.action(action))
             }
         }
-        items.append(.count)
+        if counts { items.append(.count) }
         return items
     }
 
@@ -108,7 +109,7 @@ final class ActionBarController {
         case .caseMenu:
             swapRow(actions.filter { $0.textCase != nil }.map(BarItem.action))
         case .count:
-            swapRow([.message(stats)])
+            swapRow([.message(stats ?? "")])
         case .message:
             close()
         }
@@ -391,7 +392,7 @@ extension TextAction {
         case .search: "magnifyingglass"
         case .openLink: "arrow.up.right.square"
         case .addToStack: "square.stack.3d.up"
-        case .cut, .copy, .paste, .uppercase, .lowercase, .titleCase: nil
+        case .cut, .copy, .paste, .selectAll, .uppercase, .lowercase, .titleCase: nil
         }
     }
 }

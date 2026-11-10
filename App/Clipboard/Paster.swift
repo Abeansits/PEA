@@ -1,7 +1,7 @@
 import AppKit
 import CoreGraphics
 
-/// Sends ⌘V (and ⌘C and ⌘X, for text actions) to the frontmost app.
+/// Sends ⌘V (and ⌘C, ⌘X and ⌘A, for text actions) to the frontmost app.
 ///
 /// Those keystrokes need the PostEvent privilege (`CGPreflightPostEventAccess`).
 /// It appears in the same Settings list as Accessibility, called Device
@@ -44,6 +44,12 @@ enum Paster {
     @discardableResult
     static func cut() -> Bool {
         postCommandKey("x")
+    }
+
+    /// Sends ⌘A, for the text actions bar's Select All.
+    @discardableResult
+    static func selectAll() -> Bool {
+        postCommandKey("a")
     }
 
     private static func postCommandKey(_ character: Character) -> Bool {
