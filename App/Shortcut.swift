@@ -13,6 +13,8 @@ struct AppShortcut: Codable, Equatable {
 
     static let showHistory = AppShortcut(key: "c", command: true, shift: true, option: false, control: false)
     static let pasteNext = AppShortcut(key: "v", command: true, shift: true, option: false, control: false)
+    /// ⌃⌥A: next to the window shortcuts, on a letter they leave free.
+    static let textActions = AppShortcut(key: "a", command: false, shift: false, option: true, control: true)
 
     var symbols: String {
         var text = ""
@@ -81,7 +83,8 @@ struct AppShortcut: Codable, Equatable {
 struct ShortcutField: View {
     let title: String
     @Binding var shortcut: AppShortcut
-    var reserved: AppShortcut
+    /// Shortcuts PEA already uses elsewhere. Typing one beeps.
+    var reserved: [AppShortcut]
     var onRecording: (Bool) -> Void
 
     @State private var recording = false
@@ -134,7 +137,7 @@ struct ShortcutField: View {
                 recording.wrappedValue = false
                 return
             }
-            guard let next = AppShortcut(event: event), next != reserved else {
+            guard let next = AppShortcut(event: event), !reserved.contains(next) else {
                 NSSound.beep()
                 return
             }

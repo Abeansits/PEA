@@ -1,6 +1,6 @@
 # Windows: a small Magnet
 
-Status: v1 built. Not yet tried on a real Mac.
+Status: v1 shipped and in daily use.
 
 ## Goal
 

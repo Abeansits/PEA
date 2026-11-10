@@ -1,0 +1,376 @@
+import AppKit
+import ApplicationServices
+import PEACore
+
+/// What text actions need from the clipboard tool. Pasteboard changes PEA
+/// makes on its own must not land in history.
+@MainActor
+protocol ClipboardAccess: AnyObject {
+    /// Stop recording copies until `resumeRecording()`.
+    func suspendRecording()
+    /// Count whatever is on the pasteboard now as seen, then record again.
+    func resumeRecording()
+    /// Push onto the paste stack (and into history), like a copy would.
+    /// False when the text is too large or blank.
+    @discardableResult
+    func addToStack(_ text: String) -> Bool
+}
+
+/// An insertion point with nothing selected, in editable text.
+struct Caret {
+    /// The text element, compared with `CFEqual` to tell a second click on
+    /// the same spot from a click somewhere else.
+    let element: AXUIElement
+    /// Character offset of the insertion point. Nil when the app only
+    /// reports text markers without an index; then `bounds` decides.
+    let location: Int?
+    /// The insertion point on screen, in AppKit coordinates. Often a
+    /// zero-width rectangle as tall as the line. Nil when the app doesn't say.
+    let bounds: CGRect?
+
+    func isSamePlace(as other: Caret) -> Bool {
+        guard CFEqual(element, other.element) else { return false }
+        if let location, let otherLocation = other.location { return location == otherLocation }
+        guard let bounds, let otherBounds = other.bounds else { return false }
+        return abs(bounds.minX - otherBounds.minX) < 1 && abs(bounds.minY - otherBounds.minY) < 1
+    }
+}
+
+/// Text selected in the frontmost app.
+struct TextSelection {
+    let text: String
+    /// Where the selection is on screen, in AppKit coordinates (y grows up
+    /// from the bottom of the main screen). Nil when the app doesn't say.
+    let bounds: CGRect?
+    /// Whether the text can be changed in place. Nil when unknown (read with ⌘C).
+    let isEditable: Bool?
+}
+
+/// Reads the frontmost app's selection, and pastes over it.
+///
+/// Accessibility (`AXSelectedText`) comes first: it doesn't touch the
+/// clipboard, and it says where the selection is. Many browsers and Electron
+/// apps don't answer it, so the fallback is a synthetic ⌘C. The clipboard is
+/// put back right after, and neither change is recorded in history.
+@MainActor
+final class SelectionReader {
+    private weak var clipboard: ClipboardAccess?
+    private let pasteboard = NSPasteboard.general
+
+    /// How long ⌘C gets to change the pasteboard before the selection counts as empty.
+    private static let copyTimeout: Duration = .milliseconds(400)
+    /// How long the app gets to read the pasteboard after ⌘V before the old
+    /// clipboard comes back. Apps read it while handling the keystroke.
+    private static let pasteSettle: Duration = .milliseconds(500)
+    /// Marks PEA's short-lived pasteboard contents so other clipboard tools skip them too.
+    private static let transientType = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
+
+    nonisolated static var canReadDirectly: Bool { AXIsProcessTrusted() }
+
+    /// Shows the system prompt that leads to System Settings.
+    nonisolated static func requestDirectReading() {
+        // The value of kAXTrustedCheckOptionPrompt.
+        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+    }
+
+    init(clipboard: ClipboardAccess) {
+        self.clipboard = clipboard
+    }
+
+    /// Nil when nothing is selected, the selection is only whitespace, or a
+    /// password manager marked it concealed.
+    func read() async -> TextSelection? {
+        if let element = focusedElement(), let selection = Self.selection(in: element) { return selection }
+        return await readWithCopy()
+    }
+
+    /// After a mouse gesture that usually selects text. Accessibility only:
+    /// a ⌘C after every drag would copy files in Finder and shapes in
+    /// drawing apps. `start` is where the gesture began, in AppKit
+    /// coordinates. It must be inside the focused text element, so dragging
+    /// a window by its title bar doesn't bring up an old selection.
+    func readMouseSelection(startingAt start: CGPoint) -> TextSelection? {
+        guard let element = focusedElement(timeout: Self.mouseTimeout),
+              let selection = Self.selection(in: element),
+              Self.contains(element, start)
+        else { return nil }
+        return selection
+    }
+
+    /// After a plain click: the insertion point, if the click landed in
+    /// editable text and left nothing selected. Accessibility only.
+    func readCaret(clickedAt point: CGPoint) -> Caret? {
+        guard let element = focusedElement(timeout: Self.mouseTimeout),
+              Self.isEditable(element),
+              Self.contains(element, point)
+        else { return nil }
+        // Native text views: a character range.
+        if let rangeValue = Self.copy(element, kAXSelectedTextRangeAttribute),
+           CFGetTypeID(rangeValue) == AXValueGetTypeID() {
+            var range = CFRange()
+            guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range), range.length == 0 else { return nil }
+            return Caret(element: element, location: range.location, bounds: Self.selectionBounds(in: element))
+        }
+        // WebKit and Chromium: a collapsed text marker range.
+        guard let marked = Self.markedSelection(from: element), marked.text.isEmpty else { return nil }
+        return Caret(element: element, location: marked.index, bounds: marked.bounds)
+    }
+
+    /// One line for the log: what the frontmost app reported, so a strip
+    /// that didn't appear can be explained. Roles, lengths and yes/no only.
+    func diagnose(at point: CGPoint) -> String {
+        let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?"
+        guard Self.canReadDirectly else { return "\(app): Accessibility not allowed" }
+        guard let element = focusedElement(timeout: Self.mouseTimeout) else { return "\(app): no focused element" }
+        let role = Self.copy(element, kAXRoleAttribute) as? String ?? "?"
+        let subrole = Self.copy(element, kAXSubroleAttribute) as? String ?? "-"
+        let selected = Self.copy(element, kAXSelectedTextAttribute).map { value in
+            (value as? String).map { "\($0.count) chars" } ?? "not text"
+        } ?? "unsupported"
+        let hasRange = Self.copy(element, kAXSelectedTextRangeAttribute) != nil
+        let marked = Self.markedSelection(from: element)
+        let markers = marked.map { found in
+            "\(found.text.count) chars, index " + (found.index.map { String($0) } ?? "-")
+        } ?? "none"
+        return "\(app): role \(role)/\(subrole), AXSelectedText \(selected), range \(hasRange ? "yes" : "no"), "
+            + "markers \(markers), editable \(Self.isEditable(element)), inside \(Self.contains(element, point))"
+    }
+
+    /// Pastes `text` over the selection through the clipboard, which works
+    /// in every app and leaves one undo step there. Then the clipboard
+    /// comes back. Call it once the app has keyboard focus again.
+    func replaceSelection(with text: String) async {
+        clipboard?.suspendRecording()
+        defer { clipboard?.resumeRecording() }
+        let saved = PasteboardSnapshot(pasteboard)
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        pasteboard.setData(Data(), forType: Self.transientType)
+        let written = pasteboard.changeCount
+        Paster.paste()
+        try? await Task.sleep(for: Self.pasteSettle)
+        // Something else wrote to the pasteboard meanwhile: leave it.
+        if pasteboard.changeCount == written {
+            saved.restore(to: pasteboard)
+        }
+    }
+
+    // MARK: Accessibility
+
+    /// Every click in every app asks, so a hung app gets less time than
+    /// after the shortcut.
+    private static let mouseTimeout: Float = 0.25
+
+    private func focusedElement(timeout: Float = 0.5) -> AXUIElement? {
+        guard Self.canReadDirectly,
+              let app = NSWorkspace.shared.frontmostApplication,
+              // Asking our own process from the main thread would block it.
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+        else { return nil }
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        // A hung app shouldn't freeze PEA. The timeout is per element.
+        AXUIElementSetMessagingTimeout(appElement, timeout)
+        guard let focused = Self.copyElement(appElement, kAXFocusedUIElementAttribute) else { return nil }
+        AXUIElementSetMessagingTimeout(focused, timeout)
+        return focused
+    }
+
+    private static func selection(in element: AXUIElement) -> TextSelection? {
+        if let text = copy(element, kAXSelectedTextAttribute) as? String, !text.allSatisfy(\.isWhitespace) {
+            return TextSelection(text: text, bounds: selectionBounds(in: element), isEditable: isEditable(element))
+        }
+        // WebKit (Safari, Mail) and Chromium report a selection in a page
+        // through text markers, and often "" for AXSelectedText.
+        if let marked = markedSelection(from: element), !marked.text.allSatisfy(\.isWhitespace) {
+            return TextSelection(text: marked.text, bounds: marked.bounds, isEditable: isEditable(element))
+        }
+        // Still nothing: after the shortcut, the ⌘C fallback settles it.
+        return nil
+    }
+
+    private static func isEditable(_ element: AXUIElement) -> Bool {
+        isSettable(element, kAXSelectedTextAttribute)
+            || isSettable(element, kAXValueAttribute)
+            // WebKit and Chromium: inside a contenteditable (Mail's compose window).
+            || copy(element, "AXEditableAncestor") != nil
+    }
+
+    // MARK: Text markers (WebKit, Chromium)
+
+    /// These attributes aren't in the public headers, but WebKit and
+    /// Chromium have answered them for years; screen readers depend on them.
+    private enum Marker {
+        static let selectedRange = "AXSelectedTextMarkerRange"
+        static let string = "AXStringForTextMarkerRange"
+        static let bounds = "AXBoundsForTextMarkerRange"
+        static let start = "AXStartTextMarkerForTextMarkerRange"
+        static let index = "AXIndexForTextMarker"
+    }
+
+    private struct MarkedSelection {
+        let text: String
+        let bounds: CGRect?
+        /// Character index of the selection's start, when the app reports one.
+        let index: Int?
+    }
+
+    /// The selection as text markers, asked of the element and then its
+    /// ancestors (the web area usually answers for the page).
+    private static func markedSelection(from element: AXUIElement) -> MarkedSelection? {
+        var current: AXUIElement? = element
+        for _ in 0..<8 {
+            guard let candidate = current else { return nil }
+            if let range = copy(candidate, Marker.selectedRange), CFGetTypeID(range) != AXUIElementGetTypeID(),
+               let text = parameterized(candidate, Marker.string, range) as? String {
+                let index = parameterized(candidate, Marker.start, range)
+                    .flatMap { parameterized(candidate, Marker.index, $0) as? Int }
+                return MarkedSelection(text: text, bounds: markerBounds(candidate, range), index: index)
+            }
+            current = copyElement(candidate, kAXParentAttribute)
+        }
+        return nil
+    }
+
+    private static func markerBounds(_ element: AXUIElement, _ range: CFTypeRef) -> CGRect? {
+        guard let value = parameterized(element, Marker.bounds, range), CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var rect = CGRect.zero
+        guard AXValueGetValue(value as! AXValue, .cgRect, &rect) else { return nil }
+        return onScreen(rect)
+    }
+
+    private static func parameterized(_ element: AXUIElement, _ attribute: String, _ parameter: CFTypeRef) -> CFTypeRef? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(element, attribute as CFString, parameter, &value) == .success else {
+            return nil
+        }
+        return value
+    }
+
+    /// Whether `point` (AppKit coordinates) is inside the element, with 4 pt
+    /// of slack. True when the app doesn't report a frame.
+    private static func contains(_ element: AXUIElement, _ point: CGPoint) -> Bool {
+        guard let frame = frame(of: element),
+              let mainHeight = NSScreen.screens.first?.frame.height
+        else { return true }
+        return frame.insetBy(dx: -4, dy: -4).contains(CGPoint(x: point.x, y: mainHeight - point.y))
+    }
+
+    /// The element's frame in Accessibility coordinates (y grows down from
+    /// the top of the main screen).
+    private static func frame(of element: AXUIElement) -> CGRect? {
+        var origin = CGPoint.zero
+        var size = CGSize.zero
+        guard let position = copy(element, kAXPositionAttribute), CFGetTypeID(position) == AXValueGetTypeID(),
+              AXValueGetValue(position as! AXValue, .cgPoint, &origin),
+              let extent = copy(element, kAXSizeAttribute), CFGetTypeID(extent) == AXValueGetTypeID(),
+              AXValueGetValue(extent as! AXValue, .cgSize, &size),
+              size.width > 0, size.height > 0
+        else { return nil }
+        return CGRect(origin: origin, size: size)
+    }
+
+    private static func isSettable(_ element: AXUIElement, _ attribute: String) -> Bool {
+        var settable: DarwinBoolean = false
+        return AXUIElementIsAttributeSettable(element, attribute as CFString, &settable) == .success && settable.boolValue
+    }
+
+    private static func selectionBounds(in element: AXUIElement) -> CGRect? {
+        guard let range = copy(element, kAXSelectedTextRangeAttribute),
+              CFGetTypeID(range) == AXValueGetTypeID()
+        else { return nil }
+        var value: CFTypeRef?
+        let status = AXUIElementCopyParameterizedAttributeValue(
+            element, kAXBoundsForRangeParameterizedAttribute as CFString, range, &value
+        )
+        guard status == .success, let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var rect = CGRect.zero
+        guard AXValueGetValue(value as! AXValue, .cgRect, &rect) else { return nil }
+        return onScreen(rect)
+    }
+
+    /// An Accessibility rectangle (y grows down from the top of the main
+    /// screen) in AppKit coordinates. Nil for an empty rectangle or one on
+    /// no screen, which some apps answer with.
+    private static func onScreen(_ rect: CGRect) -> CGRect? {
+        guard rect.width > 0 || rect.height > 0,
+              // screens[0] holds the menu bar; both coordinate systems start there.
+              let mainHeight = NSScreen.screens.first?.frame.height
+        else { return nil }
+        let bounds = WindowLayout.flipped(rect, mainScreenHeight: mainHeight)
+        guard NSScreen.screens.contains(where: { $0.frame.intersects(bounds) }) else { return nil }
+        return bounds
+    }
+
+    private static func copy(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
+        return value
+    }
+
+    private static func copyElement(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+        guard let value = copy(element, attribute), CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        return (value as! AXUIElement)
+    }
+
+    // MARK: ⌘C
+
+    private func readWithCopy() async -> TextSelection? {
+        clipboard?.suspendRecording()
+        defer { clipboard?.resumeRecording() }
+        let saved = PasteboardSnapshot(pasteboard)
+        let before = pasteboard.changeCount
+        Paster.copy()
+
+        let deadline = ContinuousClock.now + Self.copyTimeout
+        while pasteboard.changeCount == before, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(15))
+        }
+        // Nothing selected: most apps leave the pasteboard alone.
+        guard pasteboard.changeCount != before else { return nil }
+        // The change count moves on clearContents; give the app a moment to finish writing.
+        try? await Task.sleep(for: .milliseconds(30))
+
+        let types = pasteboard.types?.map(\.rawValue) ?? []
+        let text = SecretDetector.shouldIgnore(pasteboardTypes: types) ? nil : pasteboard.string(forType: .string)
+        saved.restore(to: pasteboard)
+        guard let text, !text.allSatisfy(\.isWhitespace) else { return nil }
+        return TextSelection(text: text, bounds: nil, isEditable: nil)
+    }
+}
+
+/// Every item and type on the pasteboard, so it can be put back as it was.
+private struct PasteboardSnapshot {
+    private let items: [[(NSPasteboard.PasteboardType, Data)]]
+    private let canRestore: Bool
+
+    private static let remoteClipboardType = NSPasteboard.PasteboardType("com.apple.is-remote-clipboard")
+
+    init(_ pasteboard: NSPasteboard) {
+        // Universal Clipboard from another device: reading it blocks while
+        // it downloads. That one isn't saved, so it isn't restored either.
+        if pasteboard.types?.contains(Self.remoteClipboardType) == true {
+            items = []
+            canRestore = false
+            return
+        }
+        items = (pasteboard.pasteboardItems ?? []).map { item in
+            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
+        }
+        canRestore = true
+    }
+
+    func restore(to pasteboard: NSPasteboard) {
+        guard canRestore else { return }
+        pasteboard.clearContents()
+        let restored = items.map { pairs -> NSPasteboardItem in
+            let item = NSPasteboardItem()
+            for (type, data) in pairs {
+                item.setData(data, forType: type)
+            }
+            return item
+        }
+        if !restored.isEmpty {
+            pasteboard.writeObjects(restored)
+        }
+    }
+}

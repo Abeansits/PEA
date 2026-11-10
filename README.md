@@ -4,7 +4,9 @@ Small, private Mac tools in one menu bar app. No analytics, no accounts, no in-a
 
 - **[Clipboard](#clipboard)**: searchable history, a copy/paste **stack**, and sync through **your own iCloud**.
 - **[Windows](#windows)**: Magnet's shortcuts for snapping the focused window to halves, quarters and thirds.
-- Next: text actions on a selection, like PopClip. See the [roadmap](docs/ROADMAP.md).
+- **[Text Actions](#text-actions)**: select text and a small PopClip-style strip appears above it: search, cut, copy, paste, open a link, push to the paste stack, change case, count words.
+
+What's next per tool is in the [roadmap](docs/ROADMAP.md).
 
 PEA used to be PCP, the clipboard manager alone. See [Coming from PCP](#coming-from-pcp).
 
@@ -50,6 +52,23 @@ Magnet's default shortcuts. They act on the focused window of the frontmost app.
 The same actions are in the menu bar under **Move Window**, which works even with the shortcuts switched off in Settings → Windows. Layouts leave the menu bar and Dock uncovered, and halves and thirds meet without gaps. A window that can't shrink far enough (System Settings, for one) stays as close as it can without leaving the screen.
 
 Moving another app's windows needs the **Accessibility** permission. PEA asks the first time you use a window shortcut. Settings → Windows shows whether it's allowed. The full behavior is in the [spec](docs/specs/windows.md).
+
+## Text Actions
+
+Select text with the mouse (drag, double-click or shift-click) and a small dark strip appears right above it:
+
+| Segment | What it does |
+|---|---|
+| 🔍 | searches the web for it (DuckDuckGo by default; Settings has Google, Kagi, Bing, Ecosia) |
+| Cut · Copy · Paste | what you'd expect; Copy is recorded in history as usual |
+| ↗ | opens it, when it's a web or email address |
+| Stack | pushes it onto the paste stack, as if you'd copied it |
+| Aa | UPPERCASE, lowercase or Title Case; ⌘Z undoes it |
+| # | shows the word and character counts |
+
+With nothing selected, click where the cursor already is (like tapping it on iOS): a strip with **Paste** and **Select All** appears, handy for pasting on a new line. Cut, Paste and Aa only show up in text you can edit. The strip doesn't take keyboard focus, so you can keep typing; typing, clicking elsewhere or scrolling hides it.
+
+It appears on its own in apps that share their text through **Accessibility**: native Mac apps, and Safari and Mail through WebKit's text markers. Chrome-based browsers and Electron apps (VS Code, Slack) only share it when asked, so PEA asks the way screen readers do (a setting, on by default; it costs those apps a little CPU). Where it still doesn't appear, press **⌃⌥A**: PEA does a quick ⌘C, puts your clipboard back right after, and that copy never shows up in history. ⌃⌥A also gives the strip keyboard focus: letters run actions (S, X, C, V, O, A, U, L, T), ← → and ↩ pick one, Esc closes it. The same actions are in the menu bar under **Text Actions**. Settings → Text Actions switches showing on selection and the shortcut on or off, changes the shortcut, and picks the search engine. The full behavior is in the [spec](docs/specs/text-actions.md).
 
 ## Coming from PCP
 
@@ -130,11 +149,12 @@ Layout:
 
 ```
 Core/           PEACore Swift package: history, stack, dedupe/merge, secret detection, search,
-                persistence, window layout geometry (pure Foundation, tested)
+                persistence, window layout geometry, text actions (pure Foundation, tested)
 App/            menu bar, hot keys, settings window
 App/Shell/      tool protocol, host, General settings
 App/Clipboard/  pasteboard monitor, paste injection, history panel, CloudKit sync
 App/Windows/    Accessibility window mover, window shortcuts, Windows settings tab
+App/TextActions/ selection watcher and reader, action bar, Text Actions settings tab
 Config/         Info.plist, entitlements, signing xcconfig
 docs/           roadmap, architecture, and per-tool specs
 ```
@@ -155,6 +175,13 @@ Windows:
 - The shortcuts are fixed for now; you can only switch them all off. They take ⌃⌥ + those keys from every app.
 - No dragging to a screen edge to snap yet, and windows in macOS full screen are left alone.
 - PEA's own windows (Settings) can't be snapped.
+
+Text Actions:
+
+- The strip appears on its own only in apps that answer Accessibility. If one doesn't, `log stream --predicate 'subsystem == "PEA" AND category == "textActions"' --level debug` shows what it reported; ⌃⌥A works there anyway.
+- With ⌃⌥A in those apps, the strip opens at the pointer rather than at the selection, and an app that copies the whole line when nothing is selected (VS Code) hands over that line.
+- There's no per-app off switch yet; showing on selection is on or off everywhere.
+- If the clipboard holds a Universal Clipboard item from another device, reading a selection through ⌘C replaces it.
 
 ## Roadmap
 

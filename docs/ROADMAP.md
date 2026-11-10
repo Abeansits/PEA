@@ -15,8 +15,8 @@ PEA (Personal Everything App) is one menu bar app holding the small Mac tools I 
 | # | Tool | Replaces | Status |
 |---|---|---|---|
 | 1 | Clipboard | PCP (this app's old self) | Shipped |
-| 2 | Windows | Magnet | v1 built, needs testing on a real Mac. [Spec](specs/windows.md) |
-| 3 | Text actions | PopClip | Next, not started |
+| 2 | Windows | Magnet | Shipped. [Spec](specs/windows.md) |
+| 3 | Text actions | PopClip | Shipped. [Spec](specs/text-actions.md) |
 
 ### 1. Clipboard
 
@@ -33,16 +33,17 @@ Left out on purpose: Universal Clipboard recording, image and file history, snip
 
 Snap the focused window to halves, quarters, thirds or full screen from the keyboard. [Spec](specs/windows.md).
 
-- **v1 (built):** Magnet's default shortcuts, a Move Window menu, Restore, move to next/previous display.
+- **v1 (shipped):** Magnet's default shortcuts, a Move Window menu, Restore, move to next/previous display.
 - **v2:** drag a window to a screen edge to snap it, with a preview; rebind each shortcut.
 
 ### 3. Text actions
 
-Select text and get a small bar of actions next to it, like PopClip.
+Select text and get a small bar of actions next to it, like PopClip. [Spec](specs/text-actions.md).
 
-- **v1 idea:** start with a shortcut that opens the bar for the current selection, before any automatic pop-up. Actions: copy, paste over the selection, search the web, open as a link, push to the PEA paste stack, change case, count words.
-- **Hard part:** reading the selection. Accessibility's `AXSelectedText` works in native apps but not in many browsers and Electron apps. The fallback is a synthetic ⌘C, which must not end up in clipboard history.
-- **v2:** show the bar automatically after a mouse selection.
+- **v1 (tried):** ⌃⌥A opened a large bar. It worked, but was too big and needed the shortcut.
+- **v1.1 (shipped):** a compact dark strip appears on its own after a mouse selection, without taking focus. Search, cut, copy, paste, open a link, push to the paste stack, change case (behind "Aa"), word count (behind "#"). Editing actions only in editable text. Clicking the cursor a second time shows Paste and Select All, like iOS. ⌃⌥A still opens it with keyboard focus, in any app.
+- **Reading the selection:** Accessibility's `AXSelectedText`. After ⌃⌥A only, where an app doesn't answer (Chrome, Electron apps), a synthetic ⌘C with clipboard recording suspended, and the old clipboard put back.
+- **Next:** show on selection in Chrome and Electron apps; a per-app off switch; more actions.
 
 ## Adding a tool
 

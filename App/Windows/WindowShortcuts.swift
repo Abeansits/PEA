@@ -57,6 +57,15 @@ struct WindowShortcut {
 
     static var all: [WindowShortcut] { groups.flatMap(\.shortcuts) }
 
+    /// The letter shortcuts as `AppShortcut`s, so a shortcut typed into
+    /// Settings can steer clear of them. Arrows, ↩ and ⌫ can't be typed there.
+    static var letterShortcuts: [AppShortcut] {
+        all.compactMap { shortcut in
+            guard case .character(let character) = shortcut.key else { return nil }
+            return AppShortcut(key: String(character), command: shortcut.command, shift: false, option: true, control: true)
+        }
+    }
+
     private static func arrow(
         _ action: WindowAction, _ code: Int, _ symbol: String, _ functionKey: Int, command: Bool = false
     ) -> WindowShortcut {

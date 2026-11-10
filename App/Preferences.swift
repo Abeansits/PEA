@@ -41,6 +41,14 @@ final class Preferences: ObservableObject {
     @Published var pasteShortcut: AppShortcut { didSet { store(pasteShortcut, key: Key.pasteShortcut) } }
     @Published var windowShortcutsEnabled: Bool { didSet { defaults.set(windowShortcutsEnabled, forKey: Key.windowShortcutsEnabled) } }
     @Published var clipboardShortcutsEnabled: Bool { didSet { defaults.set(clipboardShortcutsEnabled, forKey: Key.clipboardShortcutsEnabled) } }
+    @Published var textActionShortcutsEnabled: Bool { didSet { defaults.set(textActionShortcutsEnabled, forKey: Key.textActionShortcutsEnabled) } }
+    @Published var textActionShortcut: AppShortcut { didSet { store(textActionShortcut, key: Key.textActionShortcut) } }
+    /// Show the text actions bar after a mouse selection, without the shortcut.
+    @Published var textActionsShowOnSelect: Bool { didSet { defaults.set(textActionsShowOnSelect, forKey: Key.textActionsShowOnSelect) } }
+    /// Ask Chromium browsers and Electron apps to turn on Accessibility, so
+    /// the bar can show on selection there too.
+    @Published var textActionsSwitchOnApps: Bool { didSet { defaults.set(textActionsSwitchOnApps, forKey: Key.textActionsSwitchOnApps) } }
+    @Published var searchEngine: SearchEngine { didSet { defaults.set(searchEngine.rawValue, forKey: Key.searchEngine) } }
     /// True while Settings is waiting for a new shortcut. Not saved.
     @Published var isCapturingShortcut = false
     /// True once "Keep at most" was saved in this settings domain (changed
@@ -69,6 +77,11 @@ final class Preferences: ObservableObject {
         static let pasteShortcut = "pasteShortcut"
         static let windowShortcutsEnabled = "windowShortcutsEnabled"
         static let clipboardShortcutsEnabled = "clipboardShortcutsEnabled"
+        static let textActionShortcutsEnabled = "textActionShortcutsEnabled"
+        static let textActionShortcut = "textActionShortcut"
+        static let textActionsShowOnSelect = "textActionsShowOnSelect"
+        static let textActionsSwitchOnApps = "textActionsSwitchOnApps"
+        static let searchEngine = "searchEngine"
     }
 
     private func store(_ shortcut: AppShortcut, key: String) {
@@ -110,6 +123,10 @@ final class Preferences: ObservableObject {
             Key.recordingPaused: false,
             Key.windowShortcutsEnabled: true,
             Key.clipboardShortcutsEnabled: true,
+            Key.textActionShortcutsEnabled: true,
+            Key.textActionsShowOnSelect: true,
+            Key.textActionsSwitchOnApps: true,
+            Key.searchEngine: SearchEngine.duckDuckGo.rawValue,
         ])
         historyLimit = defaults.integer(forKey: Key.historyLimit)
         pasteOrder = PasteOrder(rawValue: defaults.string(forKey: Key.pasteOrder) ?? "") ?? .firstInFirstOut
@@ -124,5 +141,10 @@ final class Preferences: ObservableObject {
         pasteShortcut = Self.loadShortcut(Key.pasteShortcut, from: defaults, fallback: .pasteNext)
         windowShortcutsEnabled = defaults.bool(forKey: Key.windowShortcutsEnabled)
         clipboardShortcutsEnabled = defaults.bool(forKey: Key.clipboardShortcutsEnabled)
+        textActionShortcutsEnabled = defaults.bool(forKey: Key.textActionShortcutsEnabled)
+        textActionShortcut = Self.loadShortcut(Key.textActionShortcut, from: defaults, fallback: .textActions)
+        textActionsShowOnSelect = defaults.bool(forKey: Key.textActionsShowOnSelect)
+        textActionsSwitchOnApps = defaults.bool(forKey: Key.textActionsSwitchOnApps)
+        searchEngine = SearchEngine(rawValue: defaults.string(forKey: Key.searchEngine) ?? "") ?? .duckDuckGo
     }
 }

@@ -5,6 +5,7 @@ import Combine
 final class PEAHost: NSObject, NSMenuDelegate {
     let clipboard: ClipboardTool
     let windows: WindowTool
+    let textActions: TextActionTool
     let tools: [any PEATool]
     let hotKeys = HotKeyCenter()
 
@@ -17,14 +18,17 @@ final class PEAHost: NSObject, NSMenuDelegate {
         self.prefs = prefs
         let clipboard = ClipboardTool(prefs: prefs)
         let windows = WindowTool(prefs: prefs)
+        let textActions = TextActionTool(prefs: prefs, clipboard: clipboard)
         self.clipboard = clipboard
         self.windows = windows
-        self.tools = [clipboard, windows]
+        self.textActions = textActions
+        self.tools = [clipboard, windows, textActions]
         super.init()
     }
 
     func start() {
         clipboard.start()
+        textActions.start()
         bindHotKeys()
         observePreferences()
     }
@@ -37,13 +41,14 @@ final class PEAHost: NSObject, NSMenuDelegate {
         clipboard.handleRemoteNotification()
     }
 
-    /// Clipboard is installed first, so a clipboard shortcut left on the same
-    /// keys as a window shortcut still wins.
+    /// Installed in tool-list order, so on shared keys Clipboard beats
+    /// Windows, and both beat Text Actions.
     private func bindHotKeys() {
         hotKeys.unregisterAll()
         guard !prefs.isCapturingShortcut else { return }
         clipboard.installHotKeys(into: hotKeys)
         windows.installHotKeys(into: hotKeys)
+        textActions.installHotKeys(into: hotKeys)
     }
 
     private func observePreferences() {
