@@ -41,7 +41,7 @@ Snap the focused window to halves, quarters, thirds or full screen from the keyb
 Select text and get a small bar of actions next to it, like PopClip. [Spec](specs/text-actions.md).
 
 - **v1 (tried):** ⌃⌥A opened a large bar. It worked, but was too big and needed the shortcut.
-- **v1.1 (built):** a compact dark strip appears on its own after a mouse selection, without taking focus. Search, cut, copy, paste, open a link, push to the paste stack, change case (behind "Aa"), word count (behind "#"). Editing actions only in editable text. ⌃⌥A still opens it with keyboard focus, in any app.
+- **v1.1 (built):** a compact dark strip appears on its own after a mouse selection, without taking focus. Search, cut, copy, paste, open a link, push to the paste stack, change case (behind "Aa"), word count (behind "#"). Editing actions only in editable text. Clicking the cursor a second time shows Paste and Select All, like iOS. ⌃⌥A still opens it with keyboard focus, in any app.
 - **Reading the selection:** Accessibility's `AXSelectedText`. After ⌃⌥A only, where an app doesn't answer (Chrome, Electron apps), a synthetic ⌘C with clipboard recording suspended, and the old clipboard put back.
 - **Next:** show on selection in Chrome and Electron apps; a per-app off switch; more actions.
 
