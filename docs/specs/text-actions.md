@@ -1,6 +1,6 @@
 # Text actions: a small PopClip
 
-Status: v1.1 built: the bar shows on selection and is a compact dark strip. Not yet tried on a real Mac. (v1, shortcut only with a large bar, was tried and worked, but was too big and needed the shortcut.)
+Status: v1.1 shipped. Tried on a Mac in TextEdit, Messages, Notes, Mail, Safari and Chromium browsers: selection and the cursor strip work in all of them. (v1, shortcut only with a large bar, worked but was too big and needed the shortcut.)
 
 ## Goal
 
