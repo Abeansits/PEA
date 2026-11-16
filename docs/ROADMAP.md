@@ -14,7 +14,7 @@ PEA (Personal Everything App) is one menu bar app holding the small Mac tools I 
 
 | # | Tool | Replaces | Status |
 |---|---|---|---|
-| 1 | Clipboard | PCP (this app's old self) | Shipped |
+| 1 | Clipboard | — | Shipped |
 | 2 | Windows | Magnet | Shipped. [Spec](specs/windows.md) |
 | 3 | Text actions | PopClip | Shipped. [Spec](specs/text-actions.md) |
 

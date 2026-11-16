@@ -8,8 +8,6 @@ Small, private Mac tools in one menu bar app. No analytics, no accounts, no in-a
 
 What's next per tool is in the [roadmap](docs/ROADMAP.md).
 
-PEA used to be PCP, the clipboard manager alone. See [Coming from PCP](#coming-from-pcp).
-
 ## Clipboard
 
 | Shortcut | What it does |
@@ -69,14 +67,6 @@ Select text with the mouse (drag, double-click or shift-click) and a small dark 
 With nothing selected, click where the cursor already is (like tapping it on iOS): a strip with **Paste** and **Select All** appears, handy for pasting on a new line. Cut, Paste and Aa only show up in text you can edit. The strip doesn't take keyboard focus, so you can keep typing; typing, clicking elsewhere or scrolling hides it.
 
 It appears on its own in apps that share their text through **Accessibility**: native Mac apps, and Safari and Mail through WebKit's text markers. Chrome-based browsers and Electron apps (VS Code, Slack) only share it when asked, so PEA asks the way screen readers do (a setting, on by default; it costs those apps a little CPU). Where it still doesn't appear, press **⌃⌥A**: PEA does a quick ⌘C, puts your clipboard back right after, and that copy never shows up in history. ⌃⌥A also gives the strip keyboard focus: letters run actions (S, X, C, V, O, A, U, L, T), ← → and ↩ pick one, Esc closes it. The same actions are in the menu bar under **Text Actions**. Settings → Text Actions switches showing on selection and the shortcut on or off, changes the shortcut, and picks the search engine. The full behavior is in the [spec](docs/specs/text-actions.md).
-
-## Coming from PCP
-
-PEA is PCP renamed. On first launch it moves `~/Library/Application Support/PCP/` to `PEA/`, so your history and sync state carry over. Some things are tied to the old name or signature and need a one-time redo:
-
-- **The old app.** Quit `PCP.app` and move it to the Trash. Two copies would both record copies. If PCP was a login item, turn **Launch at login** off in PCP first, then on in PEA.
-- **Bundle id.** If `Config/Local.xcconfig` sets `PCP_BUNDLE_ID`, rename that line to `PEA_BUNDLE_ID` and keep the value. The bundle id picks the iCloud container and your settings, so keeping it keeps both. Without a Local.xcconfig the placeholder id changes from `com.example.pcp` to `com.example.pea`; PEA copies PCP's settings over on its first launch. If settings do start from the defaults anyway, PEA still keeps every migrated clip: it raises "Keep at most" to the limit the history was saved with.
-- **Permissions.** `make install` now signs with a new **PEA Local** certificate, so macOS asks for the paste permission once more. Remove the old PCP row in that Settings list.
 
 ## Build & install
 

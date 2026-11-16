@@ -6,9 +6,7 @@ PEA is one AppKit process. `main.swift` sets `NSApplication` activation policy `
 
 ## Public identity
 
-The GitHub repository stays `Abeansits/pcp`. Do not rename it, and do not edit the GitHub description. The product, the menu-bar app, the Xcode target, and `PRODUCT_NAME` are PEA. The Swift package is `PEACore`. XcodeGen writes `PEA.xcodeproj`, which `.gitignore` already ignores.
-
-The string PCP stays only for the migration in [PCP migration](#pcp-migration). That is the only reason to keep it.
+The product, the menu-bar app, the Xcode target, and `PRODUCT_NAME` are PEA. The Swift package is `PEACore`. XcodeGen writes `PEA.xcodeproj`, which `.gitignore` ignores. Do not commit it. The GitHub repository is `Abeansits/PEA`.
 
 ## Shipped tools
 
@@ -18,7 +16,7 @@ The host's tool list is exactly this, in this order:
 2. Windows
 3. Text Actions
 
-Clipboard is the shipped PCP replacement (history, paste stack, secret filtering, iCloud). Windows is the shipped Magnet-style mover. Text Actions is the PopClip-shaped tool: a bar of actions for the selected text. Its behavior is in [docs/specs/text-actions.md](specs/text-actions.md).
+Clipboard is history, the paste stack, secret filtering, and iCloud sync. Windows is the Magnet-style mover. Text Actions is the PopClip-shaped tool: a bar of actions for the selected text. Its behavior is in [docs/specs/text-actions.md](specs/text-actions.md).
 
 ## `PEATool`
 
@@ -82,7 +80,7 @@ What the host does:
 
 `HotKeyCenter.unregisterAll()` does not reset `nextID`. `reregisterAll()` installs in sorted id order, so the first `register` after each `unregisterAll` keeps the lower id. Carbon `RegisterEventHotKey` gives the first registration the key. Tools are installed in tool-list order for that reason: on shared keys Clipboard beats Windows, and both beat Text Actions. Tools register only their own keys. `ShortcutField` takes a `reserved` list and beeps at a shortcut another PEA shortcut holds, so the overlap takes effort.
 
-Rebind on the next main-queue turn after `Preferences.objectWillChange` or `prefs.$isCapturingShortcut`, same reason as today's `AppDelegate`: `@Published` fires before the new value is stored. `receive(on: RunLoop.main)`, then `bindHotKeys()`. `ShortcutField` in `App/Shortcut.swift` sets `isCapturingShortcut`. While it is true, every global shortcut, including Windows, stays unregistered. That matches the current behavior.
+Rebind on the next main-queue turn after `Preferences.objectWillChange` or `prefs.$isCapturingShortcut`, because `@Published` fires before the new value is stored. `receive(on: RunLoop.main)`, then `bindHotKeys()`. `ShortcutField` in `App/Shortcut.swift` sets `isCapturingShortcut`. While it is true, every global shortcut, including Windows, stays unregistered.
 
 ## Status menu
 
@@ -96,7 +94,7 @@ Rebind on the next main-queue turn after `Preferences.objectWillChange` or `pref
 
 The host does not retarget tool items. Separators stay separators.
 
-Clipboard's `menuItems()`, same actions as `AppDelegate.menuNeedsUpdate` today:
+Clipboard's `menuItems()`:
 
 | Item | Action | Enabled when | Key equivalent |
 |---|---|---|---|
@@ -108,25 +106,25 @@ Clipboard's `menuItems()`, same actions as `AppDelegate.menuNeedsUpdate` today:
 | Pause Recording | `recordingPaused.toggle()`, checkmark follows the flag | always | none |
 | Clear History… | the existing `NSAlert` (iCloud wording when `syncEnabled`) | always | none |
 
-The hotkey for show-history still calls `StackPanelController.toggle()`. The menu item still calls `show()`. The 0.15 s menu delay and the 0.05 s history-panel delay stay.
+The show-history hot key calls `StackPanelController.toggle()`. The menu item calls `show()`. Keep the 0.15 s menu delay and the 0.05 s history-panel delay.
 
-When `clipboardShortcutsEnabled` is false, those three items stay in the menu and keep their actions. Their `keyEquivalent` is `""`. Still assign `keyEquivalentModifierMask` from the shortcut, which is what `windowMenu()` does today when window shortcuts are off.
+When `clipboardShortcutsEnabled` is false, those three items stay in the menu and keep their actions. Their `keyEquivalent` is `""`. Still assign `keyEquivalentModifierMask` from the shortcut, as Windows does when its shortcuts are off.
 
-Windows' `menuItems()` is today's `windowMenu()` body: `WindowShortcut.groups` in order, a separator between groups, `representedObject` = `action.rawValue`, action calls `WindowManager.perform`. `keyEquivalent` is `shortcut.keyEquivalent` when `windowShortcutsEnabled` is true and `""` otherwise.
+Windows' `menuItems()`: `WindowShortcut.groups` in order, a separator between groups, `representedObject` = `action.rawValue`, action calls `WindowManager.perform`. `keyEquivalent` is `shortcut.keyEquivalent` when `windowShortcutsEnabled` is true and `""` otherwise.
 
 Text Actions' `menuItems()`: Show Actions for Selection (`keyEquivalent` from `textActionShortcut` when `textActionShortcutsEnabled`, `""` otherwise, modifier mask always assigned), then two groups after separators: Search the Web, Open Link, Add to Paste Stack; Make UPPERCASE, Make lowercase, Make Title Case. Each waits 0.15 s for the menu to close, then reads the selection. `representedObject` is `TextAction.rawValue`.
 
 ## Status item
 
-The status item stays the SF Symbol `paperclip`, accessibility description `PEA`, `imagePosition` `.imageLeading`. A generic template icon is not a substitute: the button title is the paste-stack count (`" \(count)"` when the stack is non-empty, otherwise `""`).
+The status item is the SF Symbol `paperclip`, accessibility description `PEA`, `imagePosition` `.imageLeading`. A generic template icon is not a substitute: the button title is the paste-stack count (`" \(count)"` when the stack is non-empty, otherwise `""`).
 
-`ClipboardTool.statusAppearance()` returns the title, the tooltip, and `appearsDisabled`. Tooltip text stays `"Next: \(next.preview(maxLength: 80))"` or `"Nothing waiting to paste"`. `appearsDisabled` follows `recordingPaused`. The symbol is shell policy, not a `PEATool` property. `AppDelegate` applies the appearance to the button. `ClipboardTool.onStatusChange` fires when `HistoryModel.$history`, `pasteOrder`, or `recordingPaused` changes. `AppDelegate` sets that callback before `host.start()`.
+`ClipboardTool.statusAppearance()` returns the title, the tooltip, and `appearsDisabled`. Tooltip text is `"Next: \(next.preview(maxLength: 80))"` or `"Nothing waiting to paste"`. `appearsDisabled` follows `recordingPaused`. The symbol is shell policy, not a `PEATool` property. `AppDelegate` applies the appearance to the button. `ClipboardTool.onStatusChange` fires when `HistoryModel.$history`, `pasteOrder`, or `recordingPaused` changes. `AppDelegate` sets that callback before `host.start()`.
 
 ## Lifecycle
 
-`AppDelegate.applicationDidFinishLaunching`: create the status item, wire `onStatusChange`, call `host.start()`, then `NSApp.registerForRemoteNotifications()`. Registration stays on the delegate because it is an `NSApp` call.
+`AppDelegate.applicationDidFinishLaunching`: create the status item, wire `onStatusChange`, call `host.start()`, then `NSApp.registerForRemoteNotifications()`. Registration is on the delegate because it is an `NSApp` call.
 
-`ClipboardTool.start()` does what `applicationDidFinishLaunching` does for the clipboard today:
+`ClipboardTool.start()`:
 
 - `model.onDelta` enqueues into `CloudSync`.
 - `PasteboardMonitor.onCopy` records through the same `handleCopy` rules (`recordingPaused`, `ignoredApps`, `SecretDetector`, `secretHandling`, `secretTTL`).
@@ -139,7 +137,7 @@ The status item stays the SF Symbol `paperclip`, accessibility description `PEA`
 
 `application(_:didReceiveRemoteNotification:)` calls `host.handleRemoteNotification()`, which calls `CloudSync.syncNow()`. `syncNow()` already no-ops when the engine is nil.
 
-The window Accessibility prompt stays inside `WindowManager.perform` (once a launch, then beep). Do not prompt for it at launch.
+The window Accessibility prompt lives inside `WindowManager.perform` (once a launch, then beep). Do not prompt for it at launch.
 
 ## Settings
 
@@ -151,7 +149,7 @@ enum SettingsWindow {
 }
 ```
 
-Same window as today: `NSTabViewController` with `tabStyle` `.toolbar`, `styleMask` `[.titled, .closable]`, `toolbarStyle` `.preference`, `isReleasedWhenClosed` false, centered. Each tab is an `NSHostingController` with `sizingOptions` `.preferredContentSize`, the tool's `title`, and `NSImage(systemSymbolName: tool.settingsSymbol)`.
+It is an `NSTabViewController` with `tabStyle` `.toolbar`, `styleMask` `[.titled, .closable]`, `toolbarStyle` `.preference`, `isReleasedWhenClosed` false, centered. Each tab is an `NSHostingController` with `sizingOptions` `.preferredContentSize`, the tool's `title`, and `NSImage(systemSymbolName: tool.settingsSymbol)`.
 
 Tab order is `tools`, then General. General is not a `PEATool`. Its symbol is `gearshape`, its label is `General`, and its view is `GeneralSettingsView` in `App/Shell/GeneralSettingsView.swift` (launch at login via `SMAppService.mainApp`, and the About block that reads `CFBundleShortVersionString`).
 
@@ -165,28 +163,21 @@ The Clipboard Shortcuts section starts with:
 Toggle("Clipboard shortcuts", isOn: $prefs.clipboardShortcutsEnabled)
 ```
 
-One footer sentence: the menu bar's history and paste items work with the shortcuts off. Pause recording stays in the History section. It is not this switch.
+Its footer says the menu bar's history and paste items work with the shortcuts off. Pause recording stays in the History section. It is not this switch.
 
-`WindowSettingsView` stays in `App/Windows/WindowSettingsView.swift`. `WindowTool.settingsView()` wraps it.
+`WindowSettingsView` is in `App/Windows/WindowSettingsView.swift`. `WindowTool.settingsView()` wraps it.
 
 ## Preferences
 
-`App/Preferences.swift` stays the only `ObservableObject` and the only `UserDefaults` facade. Tools add keys there. Do not split defaults across files, and do not give a tool its own `UserDefaults` suite.
+`App/Preferences.swift` is the only `ObservableObject` and the only `UserDefaults` facade. Tools add keys there. Do not split defaults across files, and do not give a tool its own `UserDefaults` suite.
 
 Text Actions adds `textActionsShowOnSelect` (default `true`: show the bar after a mouse selection or a second click on the cursor), `textActionsSwitchOnApps` (default `true`: turn on Accessibility in Chromium browsers and Electron apps), `textActionShortcutsEnabled` (default `true`, parallel to the other two switches), `textActionShortcut` (an `AppShortcut` stored as JSON like the clipboard shortcuts, default `.textActions` = ⌃⌥A), and `searchEngine` (a `SearchEngine` raw value, default `duckDuckGo`).
 
-Add `clipboardShortcutsEnabled`, parallel to `windowShortcutsEnabled`:
-
-- `Key.clipboardShortcutsEnabled = "clipboardShortcutsEnabled"`
-- `@Published var clipboardShortcutsEnabled: Bool`, `didSet` writes the bool
-- `defaults.register` default `true`
-- Read it in `init` with `defaults.bool(forKey:)`
-
-Existing domains lack the key, so `register` makes the default `true` and current shortcuts keep working. Do not reuse `recordingPaused`. Do not change the `windowShortcutsEnabled` key or any other key. `importPCPSettings` stays in `Preferences.init`.
+Every tool has its own shortcut switch: `clipboardShortcutsEnabled`, `windowShortcutsEnabled`, and `textActionShortcutsEnabled`. Each is a `@Published` bool whose `didSet` writes it, registered with a default of `true` and read in `init` with `defaults.bool(forKey:)`. A new key follows the same pattern, so a settings domain that predates it gets the default. Do not rename existing keys; that would reset them. Pause recording (`recordingPaused`) is not a shortcut switch.
 
 ## Hot keys per tool
 
-`ClipboardTool.installHotKeys` returns immediately when `clipboardShortcutsEnabled` is false. Otherwise it registers, in this order, the same three keys `bindHotKeys` registers today:
+`ClipboardTool.installHotKeys` returns immediately when `clipboardShortcutsEnabled` is false. Otherwise it registers, in this order:
 
 1. `historyShortcut` → `panel.toggle()`
 2. `pasteShortcut` → `pasteAndPop()`
@@ -213,13 +204,13 @@ protocol ClipboardAccess: AnyObject {
 
 `TextActionTool` holds the clipboard weakly and never sees `HistoryModel` or `PasteboardMonitor`. `Paster` gained `copy()` next to `paste()`; both post through the same keystroke code.
 
-`HotKeyCenter`, `HotKey`, and `KeyboardLayout` stay in `App/HotKeys.swift`. `AppShortcut` and `ShortcutField` stay in `App/Shortcut.swift`.
+`HotKeyCenter`, `HotKey`, and `KeyboardLayout` are in `App/HotKeys.swift`. `AppShortcut` and `ShortcutField` are in `App/Shortcut.swift`.
 
 ## Clipboard and Windows code
 
-`ClipboardTool` owns `HistoryModel`, `CloudSync`, `PasteboardMonitor`, `StackPanelController`, and every paste path (`handleCopy`, `pasteAndPop`, `pick`). Those types stay in `App/Clipboard/` and keep their current behavior. `HistoryModel.supportDirectory` still moves `~/Library/Application Support/PCP` to `PEA` once.
+`ClipboardTool` owns `HistoryModel`, `CloudSync`, `PasteboardMonitor`, `StackPanelController`, and every paste path (`handleCopy`, `pasteAndPop`, `pick`). Those types live in `App/Clipboard/`. History is stored in `HistoryModel.supportDirectory`, `~/Library/Application Support/PEA`.
 
-`WindowTool` owns `WindowManager` and the menu actions. `WindowManager`, `WindowShortcuts`, and `WindowSettingsView` stay where they are.
+`WindowTool` owns `WindowManager` and the menu actions. `WindowManager`, `WindowShortcuts`, and `WindowSettingsView` are in `App/Windows/`.
 
 ## Two-line history list preview
 
@@ -234,11 +225,11 @@ protocol ClipboardAccess: AnyObject {
 - Join kept lines with `\n`. If none remain, return `preview()`.
 - This is display-only. Do not rewrite `text`.
 
-Change `preview`'s comment from list rows to the menu and tooltip. The status item and Paste Next keep calling `preview`. They do not call `listPreview`.
+`preview` is for the menu and the tooltip. The status item and Paste Next call `preview`, not `listPreview`.
 
 `Row` in `StackPanel.swift` draws every item, sensitive or not, from `listPreview()`. Split that string on `\n` and put each piece in its own `Text` with `lineLimit(1)` and `truncationMode(.tail)`. The column frame is `minWidth: 0`, `maxWidth: .infinity`, `alignment: .leading`. Do not use one `Text` with `lineLimit(2)` or `fixedSize`: that sizes the row to the unwrapped string, then the wrapped lines paint over the next row.
 
-Add `testListPreviewKeepsTwoLines` next to `testPreviewCollapsesWhitespaceAndMasksSecrets`, which stays:
+`testListPreviewKeepsTwoLines` sits next to `testPreviewCollapsesWhitespaceAndMasksSecrets` and checks:
 
 - `"  hello\n\n  world\t!  "` → `"hello\nworld !"`
 - `"a\r\nb\rc"` → `"a\nb…"`
@@ -247,44 +238,20 @@ Add `testListPreviewKeepsTwoLines` next to `testPreviewCollapsesWhitespaceAndMas
 
 ## Version
 
-In `project.yml`, `MARKETING_VERSION` is `1.2.0` and `CURRENT_PROJECT_VERSION` is `5`. `Config/Info.plist` already reads `$(MARKETING_VERSION)` and `$(CURRENT_PROJECT_VERSION)`. Do not hard-code them there.
+`MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` live in `project.yml`. `Config/Info.plist` reads `$(MARKETING_VERSION)` and `$(CURRENT_PROJECT_VERSION)`. Do not hard-code them there.
 
-1.2.0 adds Text Actions. 1.1.0 was the shell plus the clipboard shortcut switch. The list-preview port ships in the same version because the stash has to land here. Do not open a second version for it. `project.yml` `sources` is already the whole `App` directory, so `App/Shell/` needs no new source entry. Do not add a target.
-
-## PCP migration
-
-These are the only PCP mentions that stay. Do not delete them while renaming, and do not add new ones.
-
-| Site | What it does |
-|---|---|
-| `HistoryModel.supportDirectory` | If `Application Support/PEA` is missing and `Application Support/PCP` exists, move the old folder. |
-| `Preferences.importPCPSettings` | On first launch under bundle id `com.example.pea`, copy the `com.example.pcp` persistent domain when the new domain is empty. |
-| `Makefile` `install` | Warn when `$(PREFIX)/PCP.app` exists, and when a process named `PCP` is still running. Do not launch PEA in that second case. |
-| `README.md` "Coming from PCP", `docs/ROADMAP.md` "Replaces PCP" | User-facing rename notes. |
-
-`scripts/check-names.sh` fails the build on these four contiguous needles, in any other file:
-
-- `PCPCore`
-- `PCP.xcodeproj`
-- `Personal Copy Paste`
-- `PRODUCT_NAME` set to `PCP` (`PRODUCT_NAME: PCP` in `project.yml`, or `PRODUCT_NAME = PCP` in a project file)
-
-The script excludes itself and this file (`docs/architecture.md`), plus `.git/`, `build/`, `Core/.build/`, `Core/.swiftpm/`, `DerivedData/`, `output/`, and `xcuserdata/`. It checks both paths and file contents, including untracked files, so a leftover `PCP.xcodeproj` directory fails. Migration lines that only say PCP, `com.example.pcp`, or `PCP.app` do not match the needles and do not need an allowlist. A migration comment that grows one of the four needles fails.
-
-XcodeGen's output is `PEA.xcodeproj`, which `.gitignore` ignores. Do not generate or keep a `PCP.xcodeproj`, and do not commit either project.
+1.2.0 added Text Actions. 1.1.0 added the tool shell and the clipboard shortcut switch. `project.yml` `sources` is the whole `App` directory, so a new folder under `App/` needs no source entry. There is one app target. Do not add another.
 
 ## CI and local proof
 
-`.github/workflows/ci.yml` already has one job, `build`, on `macos-15`:
+`.github/workflows/ci.yml` has two jobs. `build`, on `macos-15`, runs after checkout:
 
 1. `cd Core && swift test`
 2. `brew install xcodegen && xcodegen generate`
 3. Unsigned Debug `xcodebuild` of `PEA.xcodeproj` / scheme `PEA`, `-derivedDataPath build`, `CODE_SIGNING_ALLOWED=NO`, `CODE_SIGN_ENTITLEMENTS=` empty
 4. `make install PREFIX="$RUNNER_TEMP/Applications" OPEN=0`
 
-Keep those four steps. Insert `bash scripts/check-names.sh` immediately after checkout.
-
-Add a second job, `core-linux`, `runs-on: ubuntu-24.04` (`setup-swift@v2` rejects the 26.04 image that `ubuntu-latest` now points to). It checks out, runs `swift-actions/setup-swift@v2` with `swift-version: "6.0"`, then `cd Core && swift test`. It does not install XcodeGen and it does not build the app. The job exists so `PEACore` stays free of AppKit, UIKit, and CloudKit. `Core/Package.swift` stays `swift-tools-version:5.9` and `platforms: [.macOS(.v14)]`. Do not bump the tools version to turn on the Swift 6 language mode. Swift 6.0 is the toolchain. If that job fails on a Core concurrency error, fix it in `Core/` without an AppKit import. Do not drop the job.
+`core-linux` runs on `ubuntu-24.04` (`setup-swift@v2` rejects the 26.04 image that `ubuntu-latest` now points to). It checks out, runs `swift-actions/setup-swift@v2` with `swift-version: "6.0"`, then `cd Core && swift test`. It does not install XcodeGen and it does not build the app. The job exists so `PEACore` stays free of AppKit, UIKit, and CloudKit. `Core/Package.swift` is `swift-tools-version:5.9` and `platforms: [.macOS(.v14)]`. Do not bump the tools version to turn on the Swift 6 language mode. Swift 6.0 is the toolchain. If that job fails on a Core concurrency error, fix it in `Core/` without an AppKit import. Do not drop the job.
 
 `WindowLayout.swift` keeps its `canImport(CoreGraphics)` branch so Linux Foundation still builds.
 
@@ -300,11 +267,9 @@ xcodebuild -project PEA.xcodeproj -scheme PEA -configuration Debug \
 
 `make install` quits a running PEA and replaces `~/Applications/PEA.app`. `make unsigned` is a Release build. Neither is the local proof. CI runs `make install` in a scratch prefix.
 
-## Docs that must match
+## Keeping the docs current
 
-`docs/ROADMAP.md` under "Off means off" says that a tool that is switched off registers no shortcuts, that the menu items still run, and that Clipboard's shortcut switch is separate from Pause recording. Its table lists each tool's status and links its spec.
-
-In `README.md`, state that Settings → Clipboard can switch the clipboard shortcuts off, that Show History, Paste Next, and Paste Next with Style stay in the menu and hide their key equivalents while that switch is off, and that Pause recording is a different switch. Add `App/Shell/` to the layout tree (protocol, host, General settings). Do not rewrite the rest of the README.
+When a tool's shortcuts, settings, or behavior change, update its README section, its row and section in `docs/ROADMAP.md`, and its spec in `docs/specs/`. A new folder goes in the README's layout tree. The roadmap's "Off means off" rule and the README's Clipboard paragraph both say that a switched-off tool registers no shortcuts, that its menu items still run, and that Pause recording is a separate switch. Keep them saying it.
 
 ## Where the shell lives
 
@@ -321,8 +286,5 @@ In `README.md`, state that Settings → Clipboard can switch the clipboard short
 - `App/TextActions/SelectionWatcher.swift`
 - `App/TextActions/AccessibilitySwitch.swift`
 - `App/TextActions/TextActionSettingsView.swift`
-- `scripts/check-names.sh`
 
-There is no `App/SettingsView.swift`. Tabs come from `SettingsWindow.make(tools:)`.
-
-These stay at `App/`. They are shell services, not tools: `HotKeys.swift`, `Shortcut.swift`, `Preferences.swift`, `Log.swift`, `main.swift`, `AppDelegate.swift`.
+These are at `App/`. They are shell services, not tools: `HotKeys.swift`, `Shortcut.swift`, `Preferences.swift`, `Log.swift`, `main.swift`, `AppDelegate.swift`.

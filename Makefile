@@ -45,11 +45,7 @@ install: sign
 	ditto "$(APP)" "$(PREFIX)/PEA.app"
 	codesign --force --sign "$(SIGN_ID)" --keychain "$(SIGN_KEYCHAIN)" --timestamp=none "$(PREFIX)/PEA.app"
 	@echo "Installed: $(PREFIX)/PEA.app, signed with \"$(SIGN_ID)\"."
-	@test ! -d "$(PREFIX)/PCP.app" || echo "$(PREFIX)/PCP.app is the old name of this app. Quit it and move it to the Trash."
-	@# PEA moves PCP's data folder on first launch, so never start it while PCP runs.
-	@if pgrep -x -U "$$(id -u)" PCP >/dev/null; then \
-		echo "PCP, the old name of this app, is still running. Quit it from its menu bar icon, then open $(PREFIX)/PEA.app."; \
-	elif [ "$(OPEN)" = 1 ]; then \
+	@if [ "$(OPEN)" = 1 ]; then \
 		open "$(PREFIX)/PEA.app" && echo "Opened PEA. Its icon is the paperclip in the menu bar."; \
 	fi
 

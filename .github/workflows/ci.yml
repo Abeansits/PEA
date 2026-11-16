@@ -9,8 +9,6 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Check names
-        run: bash scripts/check-names.sh
       - name: Core tests
         run: cd Core && swift test
       - name: Generate Xcode project
