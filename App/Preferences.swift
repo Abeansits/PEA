@@ -52,7 +52,7 @@ final class Preferences: ObservableObject {
     /// True while Settings is waiting for a new shortcut. Not saved.
     @Published var isCapturingShortcut = false
     /// True once "Keep at most" was saved in this settings domain (changed
-    /// in Settings, or imported from PCP). False means it's the default.
+    /// in Settings). False means it's the default.
     var hasStoredHistoryLimit: Bool {
         guard let id = Bundle.main.bundleIdentifier else { return true }
         return defaults.persistentDomain(forName: id)?[Key.historyLimit] != nil
@@ -96,21 +96,7 @@ final class Preferences: ObservableObject {
         return shortcut
     }
 
-    /// PEA used to be PCP. Without Config/Local.xcconfig its placeholder
-    /// bundle id went from com.example.pcp to com.example.pea, which starts
-    /// an empty settings domain. On PEA's first launch, copy PCP's over.
-    /// Only for that placeholder: a real bundle id is the user's choice.
-    private static func importPCPSettings(into defaults: UserDefaults) {
-        let id = "com.example.pea"
-        guard Bundle.main.bundleIdentifier == id,
-              defaults.persistentDomain(forName: id)?.isEmpty ?? true,
-              let legacy = defaults.persistentDomain(forName: "com.example.pcp"), !legacy.isEmpty
-        else { return }
-        defaults.setPersistentDomain(legacy, forName: id)
-    }
-
     private init() {
-        Self.importPCPSettings(into: defaults)
         defaults.register(defaults: [
             Key.historyLimit: ClipHistory.defaultCapacity,
             Key.pasteOrder: PasteOrder.firstInFirstOut.rawValue,
